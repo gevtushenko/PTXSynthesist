@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 
+class QLineEdit;
 class QTextEdit;
 class QTimer;
 
@@ -14,6 +15,7 @@ public:
   MainWindow();
 
 private:
+  QLineEdit *options {};
   QTextEdit *cuda {};
   QTextEdit *ptx {};
   QTimer *timer {};
