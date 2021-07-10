@@ -1,7 +1,3 @@
-//
-// Created by evtus on 7/10/2021.
-//
-
 #ifndef PTXSYNTHESIST_PTX_INTERPRETER_H
 #define PTXSYNTHESIST_PTX_INTERPRETER_H
 

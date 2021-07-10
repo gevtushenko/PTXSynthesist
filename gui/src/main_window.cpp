@@ -9,6 +9,7 @@
 
 #include "ptx_generator.h"
 #include "ptx_interpreter.h"
+#include "cuda_syntax_highlighter.h"
 
 MainWindow::MainWindow()
   : options(new QLineEdit())
@@ -53,6 +54,35 @@ MainWindow::MainWindow()
   QObject::connect(cuda->document(), &QTextDocument::contentsChanged, this, &MainWindow::reset_timer);
   QObject::connect(options, &QLineEdit::textChanged, this, &MainWindow::reset_timer);
   QObject::connect(timer, &QTimer::timeout, this, &MainWindow::regen_ptx);
+
+  QFont jet_brains_mono = QFont("JetBrains Mono", 12);
+  cuda->setFont(jet_brains_mono);
+  ptx->setFont(jet_brains_mono);
+  options->setFont(jet_brains_mono);
+
+  CUDASyntaxHighlighter *cuda_syntax_highlighter = new CUDASyntaxHighlighter(cuda->document());
+
+  setStyleSheet("QTextEdit {"
+                " background-color: #282a36; "
+                " color: #F8F8F2; "
+                "}"
+                ""
+                "QLineEdit {"
+                " background-color: #282a36; "
+                " color: #F8F8F2; "
+                "}"
+                ""
+                "QScrollBar:vertical {"
+                "    padding: 0px 0px 0px 0px;"
+                "    background: #282a36;"
+                "}"
+                "QScrollBar::handle:vertical {"
+                "    background: #4c4d56;"
+                "}"
+                ""
+                "QMainWindow {"
+                " background-color: #414450; "
+                "}");
 
   reset_timer();
 }

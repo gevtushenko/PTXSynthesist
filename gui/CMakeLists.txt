@@ -14,7 +14,10 @@ add_executable(${PROJECT_NAME}
         src/main.cpp
 
         include/main_window.h
-        src/main_window.cpp)
+        src/main_window.cpp
+
+        include/cuda_syntax_highlighter.h
+        src/cuda_syntax_highlighter.cpp)
 
 if (NOT CMAKE_PREFIX_PATH)
     message(WARNING "CMAKE_PREFIX_PATH is not defined, you may need to set it "
