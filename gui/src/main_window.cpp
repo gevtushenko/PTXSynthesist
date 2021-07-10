@@ -45,9 +45,12 @@ MainWindow::MainWindow()
   spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   tool_bar->addWidget(spacer);
 
-  const QIcon newIcon = QIcon::fromTheme("media-playback-start");
-  QAction *interpret_action = new QAction(newIcon, "Interpret", this);
+  QAction *run_action = new QAction(QIcon(":/icons/play.png"), "Run", this);
+  QAction *interpret_action = new QAction(QIcon(":/icons/bug.png"), "Interpret", this);
+
+  tool_bar->addAction(run_action);
   tool_bar->addAction(interpret_action);
+  tool_bar->setMovable(false);
 
   QObject::connect(interpret_action, &QAction::triggered, this, &MainWindow::interpret);
 
@@ -57,14 +60,30 @@ MainWindow::MainWindow()
 
   QFont jet_brains_mono = QFont("JetBrains Mono", 12);
   cuda->setFont(jet_brains_mono);
-  ptx->setFont(jet_brains_mono);
   options->setFont(jet_brains_mono);
+
+  ptx->setFont(jet_brains_mono);
+  ptx->setReadOnly(true);
 
   CUDASyntaxHighlighter *cuda_syntax_highlighter = new CUDASyntaxHighlighter(cuda->document());
 
   setStyleSheet("QTextEdit {"
                 " background-color: #282a36; "
                 " color: #F8F8F2; "
+                "}"
+                ""
+                "QToolBar {"
+                " background-color: #414450;"
+                "}"
+                ""
+                "QToolButton {"
+                " max-width: 15px; "
+                " max-height: 15px; "
+                " margin: 8px 4px; "
+                "}"
+                ""
+                "QToolButton:hover {"
+                " background-color: #282a36; "
                 "}"
                 ""
                 "QLineEdit {"
@@ -96,7 +115,7 @@ void MainWindow::interpret()
 
 void MainWindow::reset_timer()
 {
-  timer->start(500);
+  timer->start(1000);
 }
 
 void MainWindow::regen_ptx()

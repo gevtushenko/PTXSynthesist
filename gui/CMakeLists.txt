@@ -8,7 +8,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 set(QT_VERSION 6)
-set(REQUIRED_LIBS Core Gui Widgets)
+set(REQUIRED_LIBS Core Gui Widgets Svg)
 
 add_executable(${PROJECT_NAME}
         src/main.cpp
@@ -17,7 +17,9 @@ add_executable(${PROJECT_NAME}
         src/main_window.cpp
 
         include/cuda_syntax_highlighter.h
-        src/cuda_syntax_highlighter.cpp)
+        src/cuda_syntax_highlighter.cpp
+
+        resources/resources.qrc)
 
 if (NOT CMAKE_PREFIX_PATH)
     message(WARNING "CMAKE_PREFIX_PATH is not defined, you may need to set it "
