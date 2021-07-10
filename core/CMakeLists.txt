@@ -5,7 +5,10 @@ set(CMAKE_CXX_STANDARD 20)
 
 add_library(${PROJECT_NAME}
         include/ptx_generator.h
-        src/ptx_generator.cpp)
+        src/ptx_generator.cpp
+
+        include/ptx_interpreter.h
+        src/ptx_interpreter.cpp)
 
 find_package(CUDA REQUIRED)
 find_library(CUDA_NVRTC_LIB libnvrtc nvrtc HINTS "${CUDA_TOOLKIT_ROOT_DIR}/lib64" "${LIBNVRTC_LIBRARY_DIR}" "${CUDA_TOOLKIT_ROOT_DIR}/lib/x64" /usr/lib64 /usr/local/cuda/lib64)

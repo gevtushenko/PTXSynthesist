@@ -1,12 +1,14 @@
 #include "main_window.h"
 
 #include <QTimer>
+#include <QToolBar>
 #include <QLineEdit>
 #include <QTextEdit>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 
 #include "ptx_generator.h"
+#include "ptx_interpreter.h"
 
 MainWindow::MainWindow()
   : options(new QLineEdit())
@@ -37,11 +39,29 @@ MainWindow::MainWindow()
 
   timer->setSingleShot(true);
 
+  tool_bar = addToolBar("Interpreter");
+  QWidget* spacer = new QWidget();
+  spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+  tool_bar->addWidget(spacer);
+
+  const QIcon newIcon = QIcon::fromTheme("media-playback-start");
+  QAction *interpret_action = new QAction(newIcon, "Interpret", this);
+  tool_bar->addAction(interpret_action);
+
+  QObject::connect(interpret_action, &QAction::triggered, this, &MainWindow::interpret);
+
   QObject::connect(cuda->document(), &QTextDocument::contentsChanged, this, &MainWindow::reset_timer);
   QObject::connect(options, &QLineEdit::textChanged, this, &MainWindow::reset_timer);
   QObject::connect(timer, &QTimer::timeout, this, &MainWindow::regen_ptx);
 
   reset_timer();
+}
+
+void MainWindow::interpret()
+{
+  PTXInterpreter interpreter;
+
+  interpreter.interpret(ptx->toPlainText().toStdString());
 }
 
 void MainWindow::reset_timer()

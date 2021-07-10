@@ -5,6 +5,7 @@
 
 class QLineEdit;
 class QTextEdit;
+class QToolBar;
 class QTimer;
 
 class MainWindow : public QMainWindow
@@ -19,10 +20,12 @@ private:
   QTextEdit *cuda {};
   QTextEdit *ptx {};
   QTimer *timer {};
+  QToolBar *tool_bar {};
 
 private slots:
   void reset_timer();
   void regen_ptx();
+  void interpret();
 };
 
 #endif //PTXSYNTHESIST_MAIN_WINDOW_H
