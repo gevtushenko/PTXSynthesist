@@ -10,6 +10,7 @@ class CodeEditor;
 class QToolBar;
 class QTimer;
 class QLineSeries;
+class QScatterSeries;
 class QChartView;
 class QChart;
 
@@ -32,7 +33,8 @@ private:
   QToolBar *tool_bar {};
 
   unsigned int execution_id {};
-  QLineSeries *series {};
+  QLineSeries *line_series {};
+  QScatterSeries *scatter_series {};
   QChartView *chart_view {};
   QChart *chart {};
 

@@ -10,6 +10,7 @@
 
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
+#include <QtCharts/QScatterSeries>
 
 #include "ptx_executor.h"
 #include "ptx_generator.h"
@@ -54,8 +55,10 @@ MainWindow::MainWindow()
   chart_view->setRenderHint(QPainter::Antialiasing);
   chart_view->hide();
 
-  series = new QLineSeries();
-  chart->addSeries(series);
+  line_series = new QLineSeries();
+  scatter_series = new QScatterSeries();
+  chart->addSeries(line_series);
+  chart->addSeries(scatter_series);
   chart->createDefaultAxes();
   chart->legend()->hide();
 
@@ -208,6 +211,8 @@ void MainWindow::regen_ptx()
 
 void MainWindow::execute()
 {
+    execution_id++;
+
     if (!executor)
     {
         executor = std::make_unique<PTXExecutor>();
@@ -228,10 +233,9 @@ void MainWindow::execute()
     min_elapsed = std::min(min_elapsed, elapsed);
     max_elapsed = std::max(max_elapsed, elapsed);
 
-    series->append(static_cast<double>(execution_id), elapsed);
+    line_series->append(static_cast<double>(execution_id), elapsed);
+    scatter_series->append(static_cast<double>(execution_id), elapsed);
 
-    chart->axes(Qt::Horizontal).back()->setRange(0, execution_id);
+    chart->axes(Qt::Horizontal).back()->setRange(0, execution_id + 1);
     chart->axes(Qt::Vertical).back()->setRange(min_elapsed - min_elapsed / 4, max_elapsed + max_elapsed / 4);
-
-    execution_id++;
 }
