@@ -14,6 +14,7 @@
 
 #include "code_editor.hpp"
 #include "cuda_highlighter.hpp"
+#include "ptx_highlighter.hpp"
 
 MainWindow::MainWindow()
   : options(new QLineEdit())
@@ -82,8 +83,9 @@ MainWindow::MainWindow()
   ptx->setReadOnly(true);
 
   load_style(":/style/dracula.xml");
-  // CUDASyntaxHighlighter *cuda_syntax_highlighter = new CUDASyntaxHighlighter(cuda->document());
+
   cuda->setHighlighter(new CUDAHighlighter());
+  ptx->setHighlighter(new PTXHighlighter());
 
   setStyleSheet("QToolBar {"
                 " background-color: #414450;"

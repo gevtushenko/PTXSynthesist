@@ -25,6 +25,9 @@ add_executable(${PROJECT_NAME}
         include/cuda_highlighter.hpp
         src/cuda_highlighter.cpp
 
+        include/ptx_highlighter.hpp
+        src/ptx_highlighter.cpp
+
         include/framed_text_attribute.hpp
         src/framed_text_attribute.cpp
 

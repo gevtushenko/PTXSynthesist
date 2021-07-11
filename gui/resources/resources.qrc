@@ -7,5 +7,6 @@
         <file>style/dracula.xml</file>
 
         <file>languages/cuda.xml</file>
+        <file>languages/ptx.xml</file>
     </qresource>
 </RCC>
