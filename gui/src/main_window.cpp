@@ -10,11 +10,6 @@
 #include <QBarCategoryAxis>
 #include <QValueAxis>
 
-#include <QtCharts/QChartView>
-#include <QtCharts/QLineSeries>
-#include <QtCharts/QScatterSeries>
-#include <QtCharts/QBoxPlotSeries>
-
 #include "ptx_executor.h"
 #include "ptx_generator.h"
 #include "ptx_interpreter.h"

@@ -8,6 +8,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 set(QT_VERSION 6)
+
 set(REQUIRED_LIBS Core Gui Widgets Charts)
 
 add_executable(${PROJECT_NAME}
@@ -46,7 +47,6 @@ add_executable(${PROJECT_NAME}
         include/style_syntax_highlighter.hpp
         src/style_syntax_highlighter.cpp
 
-
         resources/resources.qrc)
 
 if (NOT CMAKE_PREFIX_PATH)
@@ -84,6 +84,11 @@ if (WIN32)
     endforeach (QT_LIB)
 endif ()
 
-set(REQUIRED_LIBS_QUALIFIED Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Charts PTXSynthesistCore)
+set(REQUIRED_LIBS_QUALIFIED
+        Qt${QT_VERSION}::Core
+        Qt${QT_VERSION}::Gui
+        Qt${QT_VERSION}::Widgets
+        Qt${QT_VERSION}::Charts
+        PTXSynthesistCore)
 target_link_libraries(${PROJECT_NAME} PRIVATE ${REQUIRED_LIBS_QUALIFIED})
 target_include_directories(${PROJECT_NAME} PRIVATE include)

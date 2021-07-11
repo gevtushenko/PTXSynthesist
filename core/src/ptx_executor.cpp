@@ -24,15 +24,31 @@ struct PTXExecutorImpl
 PTXExecutor::PTXExecutor()
     : impl(new PTXExecutorImpl())
 {
+  try {
     throw_on_error(cuInit(0));
 
-    throw_on_error(cuDeviceGet (&impl->device, 0));
-    throw_on_error(cuCtxCreate (&impl->context, 0, impl->device));
+    int device_count = 0;
+    throw_on_error(cuDeviceGetCount(&device_count));
+
+    if (device_count == 0)
+    {
+      throw std::runtime_error("No GPU available");
+    }
+
+    throw_on_error(cuDeviceGet(&impl->device, 0));
+    throw_on_error(cuCtxCreate(&impl->context, 0, impl->device));
+  }
+  catch(...) {
+    impl.reset();
+  }
 }
 
 PTXExecutor::~PTXExecutor()
 {
-    throw_on_error(cuCtxDestroy (impl->context));
+    if (impl)
+    {
+      throw_on_error(cuCtxDestroy (impl->context));
+    }
 }
 
 std::vector<float> PTXExecutor::execute(
@@ -42,6 +58,16 @@ std::vector<float> PTXExecutor::execute(
         unsigned int blocks_in_grid,
         const char *code)
 {
+    std::vector<float> measurements(iterations, 0.0f);
+
+    if (!impl)
+    {
+      measurements.resize(1);
+      measurements[0] = 0.0f;
+
+      return measurements;
+    }
+
     // TODO Test
     int n = threads_in_block * blocks_in_grid;
 
@@ -62,8 +88,6 @@ std::vector<float> PTXExecutor::execute(
     throw_on_error(cuModuleLoadDataEx(&impl->module, code, 0, nullptr, nullptr));
     throw_on_error(cuModuleGetFunction(&impl->kernel, impl->module, "kernel"));
 
-
-    std::vector<float> measurements(iterations, 0.0f);
 
     for (int iteration = 0; iteration < iterations; iteration++)
     {

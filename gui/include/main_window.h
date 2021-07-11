@@ -2,6 +2,14 @@
 #define PTXSYNTHESIST_MAIN_WINDOW_H
 
 #include <QMainWindow>
+#include <QtCharts/QChartView>
+#include <QtCharts/QLineSeries>
+#include <QtCharts/QScatterSeries>
+#include <QtCharts/QBoxPlotSeries>
+
+#ifdef QT_CHARTS_USE_NAMESPACE
+QT_CHARTS_USE_NAMESPACE
+#endif
 
 #include <memory>
 
@@ -9,12 +17,6 @@ class QLineEdit;
 class CodeEditor;
 class QToolBar;
 class QTimer;
-class QLineSeries;
-class QScatterSeries;
-class QBoxPlotSeries;
-class QBarCategoryAxis;
-class QChartView;
-class QChart;
 
 class SyntaxStyle;
 class PTXExecutor;
