@@ -7,7 +7,9 @@
 #include <QTextEdit>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
-#include <syntax_style.h>
+
+#include <QtCharts/QChartView>
+#include <QtCharts/QLineSeries>
 
 #include "ptx_executor.h"
 #include "ptx_generator.h"
@@ -16,6 +18,7 @@
 #include "code_editor.hpp"
 #include "cuda_highlighter.hpp"
 #include "ptx_highlighter.hpp"
+#include "syntax_style.h"
 
 MainWindow::MainWindow()
   : options(new QLineEdit())
@@ -46,6 +49,18 @@ MainWindow::MainWindow()
   v_layout->addWidget(options);
   v_layout->addLayout(h_layout);
 
+  chart = new QChart();
+  chart_view = new QChartView(chart);
+  chart_view->setRenderHint(QPainter::Antialiasing);
+  chart_view->hide();
+
+  series = new QLineSeries();
+  chart->addSeries(series);
+  chart->createDefaultAxes();
+  chart->legend()->hide();
+
+  v_layout->addWidget(chart_view);
+
   QWidget *central_widget = new QWidget();
   central_widget->setLayout(v_layout);
 
@@ -58,8 +73,8 @@ MainWindow::MainWindow()
   spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   tool_bar->addWidget(spacer);
 
-  QAction *run_action = new QAction(QIcon(":/icons/play.png"), "Run", this);
-  QAction *interpret_action = new QAction(QIcon(":/icons/bug.png"), "Interpret", this);
+  run_action = new QAction(QIcon(":/icons/play.png"), "Run", this);
+  interpret_action = new QAction(QIcon(":/icons/bug.png"), "Interpret", this);
 
   tool_bar->addAction(run_action);
   tool_bar->addAction(interpret_action);
@@ -156,6 +171,9 @@ void MainWindow::interpret()
 void MainWindow::reset_timer()
 {
   timer->start(1000);
+
+  run_action->setEnabled(false);
+  interpret_action->setEnabled(false);
 }
 
 void MainWindow::regen_ptx()
@@ -183,15 +201,17 @@ void MainWindow::regen_ptx()
   {
     ptx->setPlainText("Compilation error");
   }
-}
 
-#include <iostream>
+  run_action->setEnabled(true);
+  interpret_action->setEnabled(true);
+}
 
 void MainWindow::execute()
 {
     if (!executor)
     {
         executor = std::make_unique<PTXExecutor>();
+        chart_view->show();
     }
 
     std::string ptx_code = ptx->toPlainText().toStdString();
@@ -199,9 +219,19 @@ void MainWindow::execute()
     // TODO Parameter manager
     void* kernel_args[4];
 
-    std::cout << executor->execute(
+    float elapsed = executor->execute(
             kernel_args,
             256,
-            42 * 1024,
-            ptx_code.c_str()) << std::endl;
+            256 * 1024,
+            ptx_code.c_str());
+
+    min_elapsed = std::min(min_elapsed, elapsed);
+    max_elapsed = std::max(max_elapsed, elapsed);
+
+    series->append(static_cast<double>(execution_id), elapsed);
+
+    chart->axes(Qt::Horizontal).back()->setRange(0, execution_id);
+    chart->axes(Qt::Vertical).back()->setRange(min_elapsed - min_elapsed / 4, max_elapsed + max_elapsed / 4);
+
+    execution_id++;
 }
