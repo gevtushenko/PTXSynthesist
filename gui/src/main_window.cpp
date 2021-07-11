@@ -7,10 +7,13 @@
 #include <QTextEdit>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QBarCategoryAxis>
+#include <QValueAxis>
 
 #include <QtCharts/QChartView>
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QScatterSeries>
+#include <QtCharts/QBoxPlotSeries>
 
 #include "ptx_executor.h"
 #include "ptx_generator.h"
@@ -20,6 +23,34 @@
 #include "cuda_highlighter.hpp"
 #include "ptx_highlighter.hpp"
 #include "syntax_style.h"
+
+ScatterLineSeries::ScatterLineSeries()
+    : line_series(new QLineSeries())
+    , scatter_series(new QScatterSeries())
+{ }
+
+void ScatterLineSeries::set_color(QColor color)
+{
+    QPen pen = line_series->pen();
+    pen.setWidth(3);
+    pen.setBrush(QBrush(color));
+
+    line_series->setPen(pen);
+    scatter_series->setColor(color);
+    // scatter_series->setColor(QColor("#F8F8F2"));
+}
+
+void ScatterLineSeries::add_to_chart(QChart *chart)
+{
+    chart->addSeries(line_series);
+    chart->addSeries(scatter_series);
+}
+
+void ScatterLineSeries::append(int x, float y)
+{
+    line_series->append(static_cast<double>(x), y);
+    scatter_series->append(static_cast<double>(x), y);
+}
 
 MainWindow::MainWindow()
   : options(new QLineEdit())
@@ -58,19 +89,14 @@ MainWindow::MainWindow()
   chart_view->setRenderHint(QPainter::Antialiasing);
   chart_view->hide();
 
-  line_series = new QLineSeries();
-  scatter_series = new QScatterSeries();
+  min_series.set_color("#BD93F9");
+  max_series.set_color("#FFB86C");
+  median_series.set_color("#50FA7B");
 
-  QPen pen = line_series->pen();
-  pen.setWidth(3);
-  pen.setBrush(QBrush("#50FA7B"));
+  min_series.add_to_chart(chart);
+  max_series.add_to_chart(chart);
+  median_series.add_to_chart(chart);
 
-  line_series->setPen(pen);
-
-  scatter_series->setColor(QColor("#F8F8F2"));
-
-  chart->addSeries(line_series);
-  chart->addSeries(scatter_series);
   chart->createDefaultAxes();
   chart->legend()->hide();
 
@@ -224,6 +250,28 @@ void MainWindow::regen_ptx()
   interpret_action->setEnabled(true);
 }
 
+float avg(const std::vector<float> &measurements)
+{
+    const float sum = std::accumulate(measurements.begin(), measurements.end(), 0.0f);
+    return sum / measurements.size();
+}
+
+float median(int begin, int end, const std::vector<float> &sorted_list)
+{
+    int count = end - begin;
+
+    if (count % 2)
+    {
+        return sorted_list.at(count / 2 + begin);
+    }
+    else
+    {
+        float right = sorted_list.at(count / 2 + begin);
+        float left = sorted_list.at(count / 2 - 1 + begin);
+        return (right + left) / 2.0;
+    }
+}
+
 void MainWindow::execute()
 {
     execution_id++;
@@ -239,17 +287,26 @@ void MainWindow::execute()
     // TODO Parameter manager
     void* kernel_args[4];
 
-    float elapsed = executor->execute(
+    const int iterations = 10;
+
+    std::vector<float> elapsed_times = executor->execute(
+            iterations,
             kernel_args,
             256,
             256 * 1024,
             ptx_code.c_str());
 
-    min_elapsed = std::min(min_elapsed, elapsed);
-    max_elapsed = std::max(max_elapsed, elapsed);
+    std::sort(elapsed_times.begin(), elapsed_times.end());
 
-    line_series->append(static_cast<double>(execution_id), elapsed);
-    scatter_series->append(static_cast<double>(execution_id), elapsed);
+    const float min_time = elapsed_times.front();
+    const float max_time = elapsed_times.back();
+
+    min_elapsed = std::min(min_elapsed, min_time);
+    max_elapsed = std::max(max_elapsed, max_time);
+
+    min_series.append(execution_id, min_time);
+    max_series.append(execution_id, max_time);
+    median_series.append(execution_id, median(0, elapsed_times.size(), elapsed_times));
 
     chart->axes(Qt::Horizontal).back()->setRange(0, execution_id + 1);
     chart->axes(Qt::Vertical).back()->setRange(min_elapsed - min_elapsed / 4, max_elapsed + max_elapsed / 4);

@@ -35,7 +35,8 @@ PTXExecutor::~PTXExecutor()
     throw_on_error(cuCtxDestroy (impl->context));
 }
 
-float PTXExecutor::execute(
+std::vector<float> PTXExecutor::execute(
+        int iterations,
         void **kernel_args,
         unsigned int threads_in_block,
         unsigned int blocks_in_grid,
@@ -62,34 +63,42 @@ float PTXExecutor::execute(
     throw_on_error(cuModuleGetFunction(&impl->kernel, impl->module, "kernel"));
 
 
-    throw_on_error(cuEventRecord(begin, 0));
+    std::vector<float> measurements(iterations, 0.0f);
 
-    // void *kernel_args[] = { &a, &d_x, &d_y, &d_out, &n };
-    throw_on_error(cuLaunchKernel(impl->kernel,
-                                  // gridDim
-                                  blocks_in_grid,
-                                  1,
-                                  1,
+    for (int iteration = 0; iteration < iterations; iteration++)
+    {
+        throw_on_error(cuEventRecord(begin, 0));
 
-                                  // blockDim
-                                  threads_in_block,
-                                  1,
-                                  1,
+        // void *kernel_args[] = { &a, &d_x, &d_y, &d_out, &n };
+        throw_on_error(cuLaunchKernel(impl->kernel,
+                // gridDim
+                                      blocks_in_grid,
+                                      1,
+                                      1,
 
-                                  // Shmem
-                                  0,
+                // blockDim
+                                      threads_in_block,
+                                      1,
+                                      1,
 
-                                  // Stream
-                                  0,
+                // Shmem
+                                      0,
 
-                                  // Params
-                                  kernel_args,
-                                  nullptr));
-    throw_on_error(cuEventRecord(end, 0));
-    throw_on_error(cuEventSynchronize(end));
+                // Stream
+                                      0,
 
-    float ms {};
-    cuEventElapsedTime(&ms, begin, end);
+                // Params
+                                      kernel_args,
+                                      nullptr));
+
+        throw_on_error(cuEventRecord(end, 0));
+        throw_on_error(cuEventSynchronize(end));
+
+        float ms {};
+        cuEventElapsedTime(&ms, begin, end);
+
+        measurements[iteration] = ms;
+    }
 
     throw_on_error(cuModuleUnload(impl->module));
 
@@ -101,5 +110,5 @@ float PTXExecutor::execute(
     cudaFree(y);
     cudaFree(result);
 
-    return ms;
+    return measurements;
 }

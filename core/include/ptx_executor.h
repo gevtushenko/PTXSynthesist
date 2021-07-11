@@ -5,6 +5,7 @@
 #ifndef PTXSYNTHESIST_PTX_EXECUTOR_H
 #define PTXSYNTHESIST_PTX_EXECUTOR_H
 
+#include <vector>
 #include <memory>
 
 struct PTXExecutorImpl;
@@ -15,7 +16,8 @@ public:
     PTXExecutor();
     ~PTXExecutor();
 
-    float execute(
+    std::vector<float> execute(
+            int iterations,
             void **kernel_args,
             unsigned int threads_in_block,
             unsigned int blocks_in_grid,
