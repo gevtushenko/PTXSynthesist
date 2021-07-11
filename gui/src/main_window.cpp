@@ -9,6 +9,7 @@
 #include <QVBoxLayout>
 #include <syntax_style.h>
 
+#include "ptx_executor.h"
 #include "ptx_generator.h"
 #include "ptx_interpreter.h"
 
@@ -27,7 +28,7 @@ MainWindow::MainWindow()
   cuda->setAcceptRichText(false);
   cuda->setPlainText("\n"
                      "// Vector add example\n"
-                     "__global__ void kernel(int n, const int *x, const int *y, int *result)\n"
+                     "extern \"C\" __global__ void kernel(int n, const int *x, const int *y, int *result)\n"
                      "{\n"
                      "  const unsigned int i = threadIdx.x + blockIdx.x * blockDim.x;\n"
                      "  \n"
@@ -65,6 +66,7 @@ MainWindow::MainWindow()
   tool_bar->setMovable(false);
 
   QObject::connect(interpret_action, &QAction::triggered, this, &MainWindow::interpret);
+  QObject::connect(run_action, &QAction::triggered, this, &MainWindow::execute);
 
   QObject::connect(cuda->document(), &QTextDocument::contentsChanged, this, &MainWindow::reset_timer);
   QObject::connect(options, &QLineEdit::textChanged, this, &MainWindow::reset_timer);
@@ -120,6 +122,8 @@ MainWindow::MainWindow()
 
   reset_timer();
 }
+
+MainWindow::~MainWindow() = default;
 
 void MainWindow::load_style(QString path)
 {
@@ -179,4 +183,25 @@ void MainWindow::regen_ptx()
   {
     ptx->setPlainText("Compilation error");
   }
+}
+
+#include <iostream>
+
+void MainWindow::execute()
+{
+    if (!executor)
+    {
+        executor = std::make_unique<PTXExecutor>();
+    }
+
+    std::string ptx_code = ptx->toPlainText().toStdString();
+
+    // TODO Parameter manager
+    void* kernel_args[4];
+
+    std::cout << executor->execute(
+            kernel_args,
+            256,
+            42 * 1024,
+            ptx_code.c_str()) << std::endl;
 }

@@ -3,11 +3,15 @@
 
 #include <QMainWindow>
 
+#include <memory>
+
 class QLineEdit;
 class CodeEditor;
 class QToolBar;
 class QTimer;
 class SyntaxStyle;
+
+class PTXExecutor;
 
 class MainWindow : public QMainWindow
 {
@@ -15,6 +19,7 @@ class MainWindow : public QMainWindow
 
 public:
   MainWindow();
+  ~MainWindow();
 
 private:
   QLineEdit *options {};
@@ -25,12 +30,15 @@ private:
 
   SyntaxStyle* syntaxStyle;
 
+  std::unique_ptr<PTXExecutor> executor;
+
   void load_style(QString path);
 
 private slots:
   void reset_timer();
   void regen_ptx();
   void interpret();
+  void execute();
 };
 
 #endif //PTXSYNTHESIST_MAIN_WINDOW_H

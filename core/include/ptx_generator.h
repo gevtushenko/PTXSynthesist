@@ -9,20 +9,7 @@
 #include <string>
 #include <vector>
 
-class PTXCode
-{
-  std::string code;
-
-public:
-  explicit PTXCode(std::string &&code)
-      : code(std::move(code))
-  { }
-
-  [[nodiscard]] const char* get_ptx() const
-  {
-    return code.c_str();
-  }
-};
+#include "ptx_code.h"
 
 class PTXGenerator
 {

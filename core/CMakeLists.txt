@@ -7,8 +7,13 @@ add_library(${PROJECT_NAME}
         include/ptx_generator.h
         src/ptx_generator.cpp
 
+        include/ptx_executor.h
+        src/ptx_executor.cpp
+
         include/ptx_interpreter.h
-        src/ptx_interpreter.cpp)
+        src/ptx_interpreter.cpp
+
+        include/ptx_code.h)
 
 find_package(CUDA REQUIRED)
 find_library(CUDA_NVRTC_LIB libnvrtc nvrtc HINTS "${CUDA_TOOLKIT_ROOT_DIR}/lib64" "${LIBNVRTC_LIBRARY_DIR}" "${CUDA_TOOLKIT_ROOT_DIR}/lib/x64" /usr/lib64 /usr/local/cuda/lib64)
@@ -16,4 +21,4 @@ find_library(CUDA_NVRTC_LIB libnvrtc nvrtc HINTS "${CUDA_TOOLKIT_ROOT_DIR}/lib64
 target_include_directories(${PROJECT_NAME}
         PUBLIC include
         PRIVATE ${CUDA_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} PRIVATE ${CUDA_LIBRARIES} ${CUDA_NVRTC_LIB})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${CUDA_LIBRARIES} ${CUDA_NVRTC_LIB} cuda)
