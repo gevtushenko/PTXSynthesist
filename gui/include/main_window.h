@@ -4,9 +4,10 @@
 #include <QMainWindow>
 
 class QLineEdit;
-class QTextEdit;
+class CodeEditor;
 class QToolBar;
 class QTimer;
+class SyntaxStyle;
 
 class MainWindow : public QMainWindow
 {
@@ -17,10 +18,14 @@ public:
 
 private:
   QLineEdit *options {};
-  QTextEdit *cuda {};
-  QTextEdit *ptx {};
+  CodeEditor *cuda {};
+  CodeEditor *ptx {};
   QTimer *timer {};
   QToolBar *tool_bar {};
+
+  SyntaxStyle* syntaxStyle;
+
+  void load_style(QString path);
 
 private slots:
   void reset_timer();

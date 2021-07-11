@@ -16,8 +16,33 @@ add_executable(${PROJECT_NAME}
         include/main_window.h
         src/main_window.cpp
 
-        include/cuda_syntax_highlighter.h
-        src/cuda_syntax_highlighter.cpp
+        include/syntax_style.h
+        src/syntax_style.cpp
+
+        include/code_editor.hpp
+        src/code_editor.cpp
+
+        include/cuda_highlighter.hpp
+        src/cuda_highlighter.cpp
+
+        include/framed_text_attribute.hpp
+        src/framed_text_attribute.cpp
+
+        include/framed_text_attribute.hpp
+        src/framed_text_attribute.cpp
+
+        include/highlight_rule.hpp
+        include/highlight_block_rule.hpp
+
+        include/language.hpp
+        src/language.cpp
+
+        include/line_number_area.hpp
+        src/line_number_area.cpp
+
+        include/style_syntax_highlighter.hpp
+        src/style_syntax_highlighter.cpp
+
 
         resources/resources.qrc)
 

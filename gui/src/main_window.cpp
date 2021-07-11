@@ -1,29 +1,40 @@
 #include "main_window.h"
 
+#include <QFile>
 #include <QTimer>
 #include <QToolBar>
 #include <QLineEdit>
 #include <QTextEdit>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <syntax_style.h>
 
 #include "ptx_generator.h"
 #include "ptx_interpreter.h"
-#include "cuda_syntax_highlighter.h"
+
+#include "code_editor.hpp"
+#include "cuda_highlighter.hpp"
 
 MainWindow::MainWindow()
   : options(new QLineEdit())
-  , cuda(new QTextEdit())
-  , ptx(new QTextEdit())
+  , cuda(new CodeEditor())
+  , ptx(new CodeEditor())
   , timer(new QTimer())
 {
   options->setText("-lineinfo, --gpu-architecture=compute_86");
 
   cuda->setAcceptRichText(false);
-  cuda->setPlainText("__global__ void kernel(int *data)\n"
+  cuda->setPlainText("\n"
+                     "// Vector add example\n"
+                     "__global__ void kernel(int n, const int *x, const int *y, int *result)\n"
                      "{\n"
-                     "    data[0] = 42;\n"
-                     "}");
+                     "  const unsigned int i = threadIdx.x + blockIdx.x * blockDim.x;\n"
+                     "  \n"
+                     "  if (i < n) \n"
+                     "  {\n"
+                     "    result[i] = x[i] + y[i];\n"
+                     "  }\n"
+                     "}\n");
 
   QHBoxLayout *h_layout = new QHBoxLayout();
   h_layout->addWidget(cuda);
@@ -62,17 +73,19 @@ MainWindow::MainWindow()
   cuda->setFont(jet_brains_mono);
   options->setFont(jet_brains_mono);
 
+  cuda->setAutoIndentation(true);
+  cuda->setAutoParentheses(true);
+  cuda->setTabReplace(true);
+  cuda->setTabReplaceSize(2);
+
   ptx->setFont(jet_brains_mono);
   ptx->setReadOnly(true);
 
-  CUDASyntaxHighlighter *cuda_syntax_highlighter = new CUDASyntaxHighlighter(cuda->document());
+  load_style(":/style/dracula.xml");
+  // CUDASyntaxHighlighter *cuda_syntax_highlighter = new CUDASyntaxHighlighter(cuda->document());
+  cuda->setHighlighter(new CUDAHighlighter());
 
-  setStyleSheet("QTextEdit {"
-                " background-color: #282a36; "
-                " color: #F8F8F2; "
-                "}"
-                ""
-                "QToolBar {"
+  setStyleSheet("QToolBar {"
                 " background-color: #414450;"
                 "}"
                 ""
@@ -104,6 +117,27 @@ MainWindow::MainWindow()
                 "}");
 
   reset_timer();
+}
+
+void MainWindow::load_style(QString path)
+{
+    QFile fl(path);
+
+    if (!fl.open(QIODevice::ReadOnly))
+    {
+        return;
+    }
+
+    auto style = new SyntaxStyle(this);
+
+    if (!style->load(fl.readAll()))
+    {
+        delete style;
+        return;
+    }
+
+    cuda->setSyntaxStyle(style);
+    ptx->setSyntaxStyle(style);
 }
 
 void MainWindow::interpret()
