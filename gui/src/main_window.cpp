@@ -51,16 +51,31 @@ MainWindow::MainWindow()
   v_layout->addLayout(h_layout);
 
   chart = new QChart();
+  chart->setBackgroundBrush(QBrush(QColor("#282a36")));
+
   chart_view = new QChartView(chart);
+  chart_view->setBackgroundBrush(QBrush(QColor("#282a36")));
   chart_view->setRenderHint(QPainter::Antialiasing);
   chart_view->hide();
 
   line_series = new QLineSeries();
   scatter_series = new QScatterSeries();
+
+  QPen pen = line_series->pen();
+  pen.setWidth(3);
+  pen.setBrush(QBrush("#50FA7B"));
+
+  line_series->setPen(pen);
+
+  scatter_series->setColor(QColor("#F8F8F2"));
+
   chart->addSeries(line_series);
   chart->addSeries(scatter_series);
   chart->createDefaultAxes();
   chart->legend()->hide();
+
+  chart->axes(Qt::Vertical).back()->setLabelsColor(QColor("#F8F8F2"));
+  chart->axes(Qt::Horizontal).back()->setLabelsColor(QColor("#F8F8F2"));
 
   v_layout->addWidget(chart_view);
 
