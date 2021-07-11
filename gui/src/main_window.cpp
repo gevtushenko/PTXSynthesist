@@ -3,12 +3,16 @@
 #include <QFile>
 #include <QTimer>
 #include <QToolBar>
+#include <QGroupBox>
 #include <QLineEdit>
+#include <QComboBox>
 #include <QTextEdit>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
-#include <QBarCategoryAxis>
 #include <QValueAxis>
+#include <QHeaderView>
+#include <QTableWidget>
+#include <QBarCategoryAxis>
 
 #include "ptx_executor.h"
 #include "ptx_generator.h"
@@ -58,7 +62,11 @@ MainWindow::MainWindow()
   cuda->setAcceptRichText(false);
   cuda->setPlainText("\n"
                      "// Vector add example\n"
-                     "extern \"C\" __global__ void kernel(int n, const int *x, const int *y, int *result)\n"
+                     "extern \"C\" __global__ void kernel(\n"
+                     "  int n, \n"
+                     "  const int *x, \n"
+                     "  const int *y, \n"
+                     "  int *result)\n"
                      "{\n"
                      "  const unsigned int i = threadIdx.x + blockIdx.x * blockDim.x;\n"
                      "  \n"
@@ -68,9 +76,21 @@ MainWindow::MainWindow()
                      "  }\n"
                      "}\n");
 
+  setup = new QGroupBox();
+  params_table = new QTableWidget(2, 4);
+  params_table->verticalHeader()->setVisible(false);
+  params_table->horizontalHeader()->setVisible(false);
+  params_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+  params_table->setSelectionMode(QAbstractItemView::NoSelection);
+
+  QVBoxLayout *group_box_layput = new QVBoxLayout();
+  group_box_layput->addWidget(params_table);
+  setup->setLayout(group_box_layput);
+
   QHBoxLayout *h_layout = new QHBoxLayout();
-  h_layout->addWidget(cuda);
-  h_layout->addWidget(ptx);
+  h_layout->addWidget(setup, 3);
+  h_layout->addWidget(cuda, 4);
+  h_layout->addWidget(ptx, 4);
 
   QVBoxLayout *v_layout = new QVBoxLayout();
   v_layout->addWidget(options);
@@ -147,6 +167,21 @@ MainWindow::MainWindow()
                 " background-color: #414450;"
                 "}"
                 ""
+                "QTableWidget {"
+                " background-color: #414450;"
+                " color: #F8F8F2; "
+                "}"
+                ""
+                "QGroupBox {"
+                " background-color: #414450;"
+                " color: #F8F8F2; "
+                "}"
+                ""
+                "QComboBox {"
+                " background-color: #414450;"
+                " color: #F8F8F2; "
+                "}"
+                ""
                 "QToolButton {"
                 " max-width: 15px; "
                 " max-height: 15px; "
@@ -178,6 +213,86 @@ MainWindow::MainWindow()
 }
 
 MainWindow::~MainWindow() = default;
+
+#include <iostream>
+void MainWindow::parse_params()
+{
+  QString cuda_code = cuda->toPlainText();
+
+  const int global_idx = cuda_code.indexOf("__global__");
+  const int params_start = cuda_code.indexOf('(', global_idx) + 1;
+  const int params_len = cuda_code.indexOf(')', params_start) - params_start;
+
+  QString params = cuda_code.mid(params_start, params_len);
+  QStringList params_list = params.split(',');
+
+  params_list.push_front("gridDim.x");
+  params_list.push_front("blockDim.x");
+
+  std::set<QString> params_set;
+
+  for (auto &param: params_list)
+  {
+    param = param.trimmed();
+    params_set.insert(param);
+  }
+
+  for (const QString &param: params_set)
+  {
+    auto it = params_map.find(param);
+
+    if (it == params_map.end())
+    {
+      params_map[param] = InputType::unspecified;
+    }
+  }
+
+  params_table->setRowCount(0);
+
+  QStringList array_input_types;
+  array_input_types << "unspecified"
+                    << "memset"
+                    << "file";
+
+  QStringList scalar_input_types;
+  scalar_input_types << "fixed"
+                     << "range";
+
+  QAbstractItemModel *model = params_table->model();
+  for (const QString &param: params_list)
+  {
+    const int insert_idx = params_table->rowCount();
+    params_table->insertRow(insert_idx);
+
+    model->setData(model->index(insert_idx, 0), param);
+    QComboBox *input_type = new QComboBox();
+
+    if (!param.contains('*'))
+    {
+      input_type->addItems(scalar_input_types);
+      params_table->setSpan(insert_idx, 2, 1, 2);
+
+      if (param == "blockDim.x")
+      {
+        model->setData(model->index(insert_idx, 2), "[128, 256, 512, 1024]");
+      }
+      else if (param == "gridDim.x")
+      {
+        model->setData(model->index(insert_idx, 2), "n");
+      }
+      else if (param.endsWith(" n"))
+      {
+        model->setData(model->index(insert_idx, 2), "[2 ** x for x in range(16, 27)]");
+      }
+    }
+    else
+    {
+      input_type->addItems(array_input_types);
+    }
+
+    params_table->setCellWidget(insert_idx, 1, input_type);
+  }
+}
 
 void MainWindow::load_style(QString path)
 {
@@ -213,6 +328,8 @@ void MainWindow::reset_timer()
 
   run_action->setEnabled(false);
   interpret_action->setEnabled(false);
+
+  parse_params();
 }
 
 void MainWindow::regen_ptx()

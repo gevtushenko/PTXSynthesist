@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-set(QT_VERSION 6)
+set(QT_VERSION 5)
 
 set(REQUIRED_LIBS Core Gui Widgets Charts)
 

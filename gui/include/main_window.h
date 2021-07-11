@@ -11,11 +11,27 @@
 QT_CHARTS_USE_NAMESPACE
 #endif
 
+#include <set>
+#include <map>
 #include <memory>
 
+enum class ParamType
+{
+  scalar,
+  array
+};
+
+enum class InputType
+{
+  unspecified,
+  memset
+};
+
 class QLineEdit;
+class QGroupBox;
 class CodeEditor;
 class QToolBar;
+class QTableWidget;
 class QTimer;
 
 class SyntaxStyle;
@@ -64,12 +80,17 @@ private:
 
   SyntaxStyle* syntaxStyle;
 
-  QAction *run_action;
-  QAction *interpret_action;
+  QAction *run_action {};
+  QAction *interpret_action {};
+  QGroupBox *setup {};
+  QTableWidget *params_table {};
+
+  std::map<QString, InputType> params_map;
 
   std::unique_ptr<PTXExecutor> executor;
 
   void load_style(QString path);
+  void parse_params();
 
 private slots:
   void reset_timer();
