@@ -3,6 +3,10 @@ project(PTXSynthesistCore)
 
 set(CMAKE_CXX_STANDARD 20)
 
+include(${PROJECT_SOURCE_DIR}/cmake/CPM.cmake)
+
+CPMAddPackage("gh:pybind/pybind11@2.6.2")
+
 add_library(${PROJECT_NAME}
         include/ptx_generator.h
         src/ptx_generator.cpp
@@ -22,4 +26,8 @@ find_library(CUDA_LIB libcuda cuda HINTS "${CUDA_TOOLKIT_ROOT_DIR}/lib64" "${CUD
 target_include_directories(${PROJECT_NAME}
         PUBLIC include
         PRIVATE ${CUDA_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} PRIVATE ${CUDA_LIBRARIES} ${CUDA_NVRTC_LIB} ${CUDA_LIB})
+target_link_libraries(${PROJECT_NAME} PRIVATE
+        ${CUDA_LIBRARIES}
+        ${CUDA_NVRTC_LIB}
+        ${CUDA_LIB}
+        pybind11::embed)

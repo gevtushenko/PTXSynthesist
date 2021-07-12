@@ -5,6 +5,10 @@
 
 #include <stdexcept>
 
+#include <pybind11/embed.h>
+
+namespace py = pybind11;
+
 void throw_on_error(CUresult status)
 {
     if (status != CUDA_SUCCESS)
@@ -58,6 +62,14 @@ std::vector<float> PTXExecutor::execute(
         unsigned int blocks_in_grid,
         const char *code)
 {
+    py::scoped_interpreter guard{};
+
+    py::exec(R"(
+          kwargs = dict(name="World", number=42)
+          message = "Hello, {name}! The answer is {number}".format(**kwargs)
+          print(message)
+      )");
+
     std::vector<float> measurements(iterations, 0.0f);
 
     if (!impl)
