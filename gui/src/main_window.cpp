@@ -224,7 +224,7 @@ void MainWindow::parse_params()
   const int params_len = cuda_code.indexOf(')', params_start) - params_start;
 
   QString params = cuda_code.mid(params_start, params_len);
-  QStringList params_list = params.split(',');
+  QStringList params_list = params.split(',', Qt::SkipEmptyParts);
 
   params_list.push_front("gridDim.x");
   params_list.push_front("blockDim.x");
@@ -254,10 +254,6 @@ void MainWindow::parse_params()
                     << "memset"
                     << "file";
 
-  QStringList scalar_input_types;
-  scalar_input_types << "fixed"
-                     << "range";
-
   QAbstractItemModel *model = params_table->model();
   for (const QString &param: params_list)
   {
@@ -265,32 +261,30 @@ void MainWindow::parse_params()
     params_table->insertRow(insert_idx);
 
     model->setData(model->index(insert_idx, 0), param);
-    QComboBox *input_type = new QComboBox();
 
     if (!param.contains('*'))
     {
-      input_type->addItems(scalar_input_types);
-      params_table->setSpan(insert_idx, 2, 1, 2);
+      params_table->setSpan(insert_idx, 1, 1, 3);
 
       if (param == "blockDim.x")
       {
-        model->setData(model->index(insert_idx, 2), "[128, 256, 512, 1024]");
+        model->setData(model->index(insert_idx, 1), "[128, 256, 512, 1024]");
       }
       else if (param == "gridDim.x")
       {
-        model->setData(model->index(insert_idx, 2), "n");
+        model->setData(model->index(insert_idx, 1), "n");
       }
       else if (param.endsWith(" n"))
       {
-        model->setData(model->index(insert_idx, 2), "[2 ** x for x in range(16, 27)]");
+        model->setData(model->index(insert_idx, 1), "[2 ** x for x in range(16, 27)]");
       }
     }
     else
     {
+      QComboBox *input_type = new QComboBox();
       input_type->addItems(array_input_types);
+      params_table->setCellWidget(insert_idx, 1, input_type);
     }
-
-    params_table->setCellWidget(insert_idx, 1, input_type);
   }
 }
 
