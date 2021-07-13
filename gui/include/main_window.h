@@ -15,23 +15,19 @@ QT_CHARTS_USE_NAMESPACE
 #include <map>
 #include <memory>
 
-enum class ParamType
-{
-  scalar,
-  array
-};
+#include "kernel_param.h"
 
 enum class InputType
 {
   unspecified,
-  memset
+  memset,
+  scalar
 };
 
 class QLineEdit;
 class QGroupBox;
 class CodeEditor;
 class QToolBar;
-class QTableWidget;
 class QTimer;
 
 class SyntaxStyle;
@@ -66,7 +62,7 @@ private:
   QTimer *timer {};
   QToolBar *tool_bar {};
 
-  unsigned int execution_id {};
+  int execution_id {};
 
   ScatterLineSeries min_series;
   ScatterLineSeries median_series;
@@ -82,15 +78,13 @@ private:
 
   QAction *run_action {};
   QAction *interpret_action {};
-  QGroupBox *setup {};
-  QTableWidget *params_table {};
-
-  std::map<QString, InputType> params_map;
 
   std::unique_ptr<PTXExecutor> executor;
 
   void load_style(QString path);
   void parse_params();
+
+  std::vector<KernelParameter> get_params();
 
 private slots:
   void reset_timer();

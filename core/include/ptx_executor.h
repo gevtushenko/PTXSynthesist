@@ -8,6 +8,8 @@
 #include <vector>
 #include <memory>
 
+#include "kernel_param.h"
+
 struct PTXExecutorImpl;
 
 class PTXExecutor
@@ -17,11 +19,8 @@ public:
     ~PTXExecutor();
 
     std::vector<float> execute(
-            int iterations,
-            void **kernel_args,
-            unsigned int threads_in_block,
-            unsigned int blocks_in_grid,
-            const char *code);
+      const std::vector<KernelParameter> &params,
+      const char *code);
 
 private:
     std::unique_ptr<PTXExecutorImpl> impl;

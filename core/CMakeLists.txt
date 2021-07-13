@@ -17,7 +17,7 @@ add_library(${PROJECT_NAME}
         include/ptx_interpreter.h
         src/ptx_interpreter.cpp
 
-        include/ptx_code.h)
+        include/ptx_code.h include/kernel_param.h src/kernel_param.cpp include/string_processing.h src/string_processing.cpp)
 
 find_package(CUDA REQUIRED)
 find_library(CUDA_NVRTC_LIB libnvrtc nvrtc HINTS "${CUDA_TOOLKIT_ROOT_DIR}/lib64" "${LIBNVRTC_LIBRARY_DIR}" "${CUDA_TOOLKIT_ROOT_DIR}/lib/x64" /usr/lib64 /usr/local/cuda/lib64)

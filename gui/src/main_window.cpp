@@ -57,38 +57,31 @@ MainWindow::MainWindow()
   , ptx(new CodeEditor())
   , timer(new QTimer())
 {
-  options->setText("-lineinfo, --gpu-architecture=compute_86");
+  options->setText("-lineinfo, --gpu-architecture=compute_75");
 
   cuda->setAcceptRichText(false);
   cuda->setPlainText("\n"
                      "// Vector add example\n"
+                     "\n"
+                     "// threads_in_block = 256\n"
+                     "// blocks_in_grid = (n + threads_in_block - 1) // threads_in_block\n"
+                     "// iterations = 10\n"
+                     "\n"
                      "extern \"C\" __global__ void kernel(\n"
-                     "  int n, \n"
-                     "  const int *x, \n"
-                     "  const int *y, \n"
-                     "  int *result)\n"
+                     "  int n        /* [2 ** x for x in range(18, 27)] */, \n"
+                     "  const int *x /* n * 4   */, \n"
+                     "  const int *y /* n * 4   */, \n"
+                     "  int *result  /* n * 4   */)\n"
                      "{\n"
-                     "  const unsigned int i = threadIdx.x + blockIdx.x * blockDim.x;\n"
-                     "  \n"
-                     "  if (i < n) \n"
+                     "  for (int i = threadIdx.x + blockIdx.x * blockDim.x;\n"
+                     "       i < n;\n"
+                     "       i += blockDim.x * gridDim.x) \n"
                      "  {\n"
                      "    result[i] = x[i] + y[i];\n"
                      "  }\n"
                      "}\n");
 
-  setup = new QGroupBox();
-  params_table = new QTableWidget(2, 4);
-  params_table->verticalHeader()->setVisible(false);
-  params_table->horizontalHeader()->setVisible(false);
-  params_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-  params_table->setSelectionMode(QAbstractItemView::NoSelection);
-
-  QVBoxLayout *group_box_layput = new QVBoxLayout();
-  group_box_layput->addWidget(params_table);
-  setup->setLayout(group_box_layput);
-
   QHBoxLayout *h_layout = new QHBoxLayout();
-  h_layout->addWidget(setup, 3);
   h_layout->addWidget(cuda, 4);
   h_layout->addWidget(ptx, 4);
 
@@ -215,77 +208,82 @@ MainWindow::MainWindow()
 MainWindow::~MainWindow() = default;
 
 #include <iostream>
-void MainWindow::parse_params()
+
+KernelParameter get_int_param(const char *param_name, const QString &cuda_code)
+{
+  std::string result ("int ");
+  result += param_name;
+  result += " /* ";
+
+  QString search_pattern = param_name;
+  search_pattern += "\\s+=\\s*";
+
+  auto pattern_pos = cuda_code.lastIndexOf(QRegularExpression(search_pattern));
+  auto initializer_beg = cuda_code.indexOf('=', pattern_pos) + 1;
+  auto initializer_end = cuda_code.indexOf("\n", initializer_beg);
+
+  result += cuda_code.mid(initializer_beg, initializer_end - initializer_beg).toStdString();
+
+  result += " */";
+
+  return KernelParameter(result);
+}
+
+std::vector<std::string> split_params(QString params_str)
+{
+  std::vector<std::string> normalized_params;
+
+  // TODO The whole function is a mess. I'm sorry if you are here.
+  //      I'll fix it later
+  while(true)
+  {
+    const bool stop = params_str.back() == ')';
+
+    params_str = params_str.mid(0, params_str.size() - 1);
+
+    if (stop)
+    {
+      break;
+    }
+  }
+
+  QStringList lines = params_str.split('\n', Qt::SkipEmptyParts);
+
+  for(QString& line: lines)
+  {
+    line = line.trimmed();
+
+    if(line.back() == ',')
+    {
+      line = line.mid(0, line.size() - 1);
+    }
+
+    normalized_params.push_back(line.toStdString());
+  }
+
+  return normalized_params;
+}
+
+std::vector<KernelParameter> MainWindow::get_params()
 {
   QString cuda_code = cuda->toPlainText();
 
-  const int global_idx = cuda_code.indexOf("__global__");
+  const int global_idx = cuda_code.lastIndexOf("__global__");
   const int params_start = cuda_code.indexOf('(', global_idx) + 1;
-  const int params_len = cuda_code.indexOf(')', params_start) - params_start;
+  const int params_len = cuda_code.indexOf('{', params_start) - params_start;
 
-  QString params = cuda_code.mid(params_start, params_len);
-  QStringList params_list = params.split(',', Qt::SkipEmptyParts);
+  std::vector<KernelParameter> result;
 
-  params_list.push_front("gridDim.x");
-  params_list.push_front("blockDim.x");
-
-  std::set<QString> params_set;
-
-  for (auto &param: params_list)
+  for (auto &param: split_params(cuda_code.mid(params_start, params_len)))
   {
-    param = param.trimmed();
-    params_set.insert(param);
+    result.emplace_back(param);
   }
 
-  for (const QString &param: params_set)
-  {
-    auto it = params_map.find(param);
+  result.push_back(get_int_param("iterations", cuda_code));
+  result.push_back(get_int_param("threads_in_block", cuda_code));
+  result.push_back(get_int_param("blocks_in_grid", cuda_code));
 
-    if (it == params_map.end())
-    {
-      params_map[param] = InputType::unspecified;
-    }
-  }
-
-  params_table->setRowCount(0);
-
-  QStringList array_input_types;
-  array_input_types << "unspecified"
-                    << "memset"
-                    << "file";
-
-  QAbstractItemModel *model = params_table->model();
-  for (const QString &param: params_list)
-  {
-    const int insert_idx = params_table->rowCount();
-    params_table->insertRow(insert_idx);
-
-    model->setData(model->index(insert_idx, 0), param);
-
-    if (!param.contains('*'))
-    {
-      params_table->setSpan(insert_idx, 1, 1, 3);
-
-      if (param == "blockDim.x")
-      {
-        model->setData(model->index(insert_idx, 1), "[128, 256, 512, 1024]");
-      }
-      else if (param == "gridDim.x")
-      {
-        model->setData(model->index(insert_idx, 1), "n");
-      }
-      else if (param.endsWith(" n"))
-      {
-        model->setData(model->index(insert_idx, 1), "[2 ** x for x in range(16, 27)]");
-      }
-    }
-    else
-    {
-      QComboBox *input_type = new QComboBox();
-      input_type->addItems(array_input_types);
-      params_table->setCellWidget(insert_idx, 1, input_type);
-    }
-  }
+  return result;
 }
 
 void MainWindow::load_style(QString path)
@@ -322,8 +320,6 @@ void MainWindow::reset_timer()
 
   run_action->setEnabled(false);
   interpret_action->setEnabled(false);
-
-  parse_params();
 }
 
 void MainWindow::regen_ptx()
@@ -362,6 +358,16 @@ float avg(const std::vector<float> &measurements)
     return sum / measurements.size();
 }
 
+float min(const std::vector<float> &measurements)
+{
+  return *std::min_element(measurements.begin(), measurements.end());
+}
+
+float max(const std::vector<float> &measurements)
+{
+  return *std::max_element(measurements.begin(), measurements.end());
+}
+
 float median(int begin, int end, const std::vector<float> &sorted_list)
 {
     int count = end - begin;
@@ -380,40 +386,31 @@ float median(int begin, int end, const std::vector<float> &sorted_list)
 
 void MainWindow::execute()
 {
-    execution_id++;
+  execution_id++;
 
-    if (!executor)
-    {
-        executor = std::make_unique<PTXExecutor>();
-        chart_view->show();
-    }
+  if (!executor)
+  {
+    executor = std::make_unique<PTXExecutor>();
+    chart_view->show();
+  }
 
-    std::string ptx_code = ptx->toPlainText().toStdString();
+  std::string ptx_code = ptx->toPlainText().toStdString();
 
-    // TODO Parameter manager
-    void* kernel_args[4];
+  std::vector<float> elapsed_times = executor->execute(
+    get_params(),
+    ptx_code.c_str());
 
-    const int iterations = 10;
+  const float min_time = min(elapsed_times);
+  const float max_time = max(elapsed_times);
 
-    std::vector<float> elapsed_times = executor->execute(
-            iterations,
-            kernel_args,
-            256,
-            256 * 1024,
-            ptx_code.c_str());
+  min_elapsed = std::min(min_elapsed, min_time);
+  max_elapsed = std::max(max_elapsed, max_time);
 
-    std::sort(elapsed_times.begin(), elapsed_times.end());
+  for (auto &time: elapsed_times)
+  {
+    median_series.append(execution_id++, time);
+  }
 
-    const float min_time = elapsed_times.front();
-    const float max_time = elapsed_times.back();
-
-    min_elapsed = std::min(min_elapsed, min_time);
-    max_elapsed = std::max(max_elapsed, max_time);
-
-    min_series.append(execution_id, min_time);
-    max_series.append(execution_id, max_time);
-    median_series.append(execution_id, median(0, elapsed_times.size(), elapsed_times));
-
-    chart->axes(Qt::Horizontal).back()->setRange(0, execution_id + 1);
-    chart->axes(Qt::Vertical).back()->setRange(min_elapsed - min_elapsed / 4, max_elapsed + max_elapsed / 4);
+  chart->axes(Qt::Horizontal).back()->setRange(0, execution_id + 1);
+  chart->axes(Qt::Vertical).back()->setRange(min_elapsed - min_elapsed / 4, max_elapsed + max_elapsed / 4);
 }

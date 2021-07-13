@@ -4,6 +4,9 @@
 #include <cuda_runtime.h>
 
 #include <stdexcept>
+#include <iostream>
+#include <map>
+#include <set>
 
 #include <pybind11/embed.h>
 
@@ -55,96 +58,286 @@ PTXExecutor::~PTXExecutor()
     }
 }
 
-std::vector<float> PTXExecutor::execute(
-        int iterations,
-        void **kernel_args,
-        unsigned int threads_in_block,
-        unsigned int blocks_in_grid,
-        const char *code)
+bool is_list(const py::handle &obj)
 {
-    py::scoped_interpreter guard{};
+  return py::isinstance<py::list>(obj);
+}
 
-    py::exec(R"(
-          kwargs = dict(name="World", number=42)
-          message = "Hello, {name}! The answer is {number}".format(**kwargs)
-          print(message)
-      )");
+bool is_integer(const py::handle &obj)
+{
+  return py::isinstance<py::int_>(obj);
+}
 
-    std::vector<float> measurements(iterations, 0.0f);
+class IndependentScalars
+{
+private:
+  py::dict locals;
+  std::map<std::string, int> independent_scalar_params;
 
-    if (!impl)
+public:
+  explicit IndependentScalars(const std::vector<KernelParameter> &params)
+  {
+    // TODO parse AST + build a graph
+
+    /*
+     *  import ast
+     *  code = "temperature*x"
+     *  st = ast.parse(code)
+     *  for node in ast.walk(st):
+     *  if type(node) is ast.Name:
+     *    print(node.id)
+     */
+
+    for (unsigned int step = 0; step < params.size(); step++)
     {
-      measurements.resize(1);
-      measurements[0] = 0.0f;
+      for (const KernelParameter &param : params)
+      {
+        if (independent_scalar_params.count(param.name()) > 0)
+          continue;
 
-      return measurements;
+        locals["__param__"] = param.initializer();
+
+        try
+        {
+          py::exec(R"(
+          __result__ = eval(__param__)
+          )", py::globals(), locals);
+
+          py::handle result = locals["__result__"];
+
+          if (is_integer(result))
+          {
+            independent_scalar_params[param.name()] = result.cast<int>();
+            locals[param.name()] = result;
+          }
+        }
+        catch (...)
+        {
+          // Suppose that the only reason for this exception could be dependent variables
+        }
+      }
+
+      if (independent_scalar_params.size() == params.size())
+      {
+        break;
+      }
+    }
+  }
+
+  [[nodiscard]] const py::dict &get_locals() const
+  {
+    return locals;
+  }
+
+  [[nodiscard]] const std::map<std::string, int> &get_values() const
+  {
+    return independent_scalar_params;
+  }
+};
+
+class IndependentLists
+{
+private:
+  py::dict locals;
+  std::map<std::string, py::list> lists;
+  const std::vector<KernelParameter> &params;
+
+  template <typename ActionType>
+  void process(
+    std::map<std::string, py::list>::iterator it,
+    py::dict &workspace,
+    ActionType action)
+  {
+    if (it == lists.end())
+    {
+      for (const KernelParameter &param: params)
+      {
+        if (lists.contains(param.name()))
+        {
+          continue;
+        }
+
+        workspace["__param__"] = param.initializer();
+
+        try
+        {
+          py::exec(R"(
+            __result__ = eval(__param__)
+          )", py::globals(), workspace);
+
+          workspace[param.name()] = workspace["__result__"];
+        }
+        catch(...)
+        {
+          throw std::runtime_error("Unsupported case");
+        }
+      }
+
+      action(workspace);
+    }
+    else
+    {
+      const std::string &param_name = it->first;
+      const py::list &list = it->second;
+
+      std::map<std::string, py::list>::iterator next_it = ++it;
+
+      for (const py::handle &val: list)
+      {
+        workspace[param_name.c_str()] = val;
+        process(next_it, workspace, action);
+      }
+    }
+  }
+
+public:
+  explicit IndependentLists(
+    const IndependentScalars &scalars,
+    const std::vector<KernelParameter> &params)
+    : locals(scalars.get_locals())
+    , params(params)
+  {
+    // TODO parse AST + build a graph
+
+    for (const KernelParameter &param : params)
+    {
+      if (scalars.get_values().count(param.name()) > 0)
+      {
+        continue;
+      }
+
+      locals["__param__"] = param.initializer();
+
+      try
+      {
+        py::exec(R"(
+        __result__ = eval(__param__)
+        )", py::globals(), locals);
+
+        py::handle result = locals["__result__"];
+
+        if (is_list(result))
+        {
+          lists[param.name()] = result.cast<py::list>();
+        }
+      }
+      catch (...)
+      {
+      }
+    }
+  }
+
+  template <typename ActionType>
+  void process(ActionType action)
+  {
+    py::dict workspace = locals;
+
+    process(lists.begin(), workspace, action);
+  }
+};
+
+std::vector<float> PTXExecutor::execute(
+  const std::vector<KernelParameter> &params,
+  const char *code)
+{
+  py::scoped_interpreter guard{};
+  using namespace py::literals;
+
+  std::vector<float> measurements;
+
+  // iterations, block size, grid size
+  const unsigned int predefined_params_number = 3;
+  const unsigned int params_number = params.size() - predefined_params_number;
+
+  std::map<std::string, int> kernel_params_values;
+  std::unique_ptr<void*[]> kernel_params(new void*[params_number]);
+
+  auto locals = py::dict();
+
+  IndependentScalars scalars(params);
+  IndependentLists lists(scalars, params);
+
+  throw_on_error(cuModuleLoadDataEx(&impl->module, code, 0, nullptr, nullptr));
+  throw_on_error(cuModuleGetFunction(&impl->kernel, impl->module, "kernel"));
+
+  CUevent begin, end;
+  throw_on_error(cuEventCreate(&begin, 0));
+  throw_on_error(cuEventCreate(&end, 0));
+
+  lists.process([&](const py::dict &values) {
+    std::vector<void*> arrays_memory(params_number);
+
+    int array_id = 0;
+
+    for (int param_id = 0; param_id < params_number; param_id++)
+    {
+      const KernelParameter &param = params[param_id];
+
+      if (!values.contains(param.name()))
+      {
+        throw std::runtime_error("Something's gone wrong");
+      }
+
+      if (param.is_pointer())
+      {
+        const int array_size = values[param.name()].cast<int>();
+        cudaMalloc(&arrays_memory[array_id], array_size);
+        kernel_params[param_id] = &arrays_memory[array_id++];
+      }
+      else
+      {
+        std::cout << param.name() << ": " << values[param.name()].cast<int>() << std::endl;
+        kernel_params_values[param.name()] = values[param.name()].cast<int>();
+        kernel_params[param_id] = &kernel_params_values[param.name()];
+      }
     }
 
-    // TODO Test
-    int n = threads_in_block * blocks_in_grid;
+    const unsigned int iterations = values["iterations"].cast<int>();
+    const unsigned int threads_in_block = values["threads_in_block"].cast<int>();
+    const unsigned int blocks_in_grid = values["blocks_in_grid"].cast<int>();
 
-    int *x, *y, *result;
-    cudaMalloc(&x, sizeof(int) * n);
-    cudaMalloc(&y, sizeof(int) * n);
-    cudaMalloc(&result, sizeof(int) * n);
+    throw_on_error(cuEventRecord(begin, 0));
 
-    kernel_args[0] = &n;
-    kernel_args[1] = &x;
-    kernel_args[2] = &y;
-    kernel_args[3] = &result;
+    throw_on_error(cuLaunchKernel(impl->kernel,
 
-    CUevent begin, end;
-    throw_on_error(cuEventCreate(&begin, 0));
-    throw_on_error(cuEventCreate(&end, 0));
+                                  // gridDim
+                                  blocks_in_grid,
+                                  1,
+                                  1,
 
-    throw_on_error(cuModuleLoadDataEx(&impl->module, code, 0, nullptr, nullptr));
-    throw_on_error(cuModuleGetFunction(&impl->kernel, impl->module, "kernel"));
+                                  // blockDim
+                                  threads_in_block,
+                                  1,
+                                  1,
 
+                                  // Shmem
+                                  0,
 
-    for (int iteration = 0; iteration < iterations; iteration++)
+                                  // Stream
+                                  0,
+
+                                  // Params
+                                  kernel_params.get(),
+                                  nullptr));
+
+    throw_on_error(cuEventRecord(end, 0));
+    throw_on_error(cuEventSynchronize(end));
+
+    float ms {};
+    cuEventElapsedTime(&ms, begin, end);
+
+    for (int i = 0; i < array_id; i++)
     {
-        throw_on_error(cuEventRecord(begin, 0));
-
-        // void *kernel_args[] = { &a, &d_x, &d_y, &d_out, &n };
-        throw_on_error(cuLaunchKernel(impl->kernel,
-                // gridDim
-                                      blocks_in_grid,
-                                      1,
-                                      1,
-
-                // blockDim
-                                      threads_in_block,
-                                      1,
-                                      1,
-
-                // Shmem
-                                      0,
-
-                // Stream
-                                      0,
-
-                // Params
-                                      kernel_args,
-                                      nullptr));
-
-        throw_on_error(cuEventRecord(end, 0));
-        throw_on_error(cuEventSynchronize(end));
-
-        float ms {};
-        cuEventElapsedTime(&ms, begin, end);
-
-        measurements[iteration] = ms;
+      cudaFree(arrays_memory[i]);
     }
 
-    throw_on_error(cuModuleUnload(impl->module));
+    measurements.push_back(ms);
+  });
 
-    throw_on_error(cuEventDestroy(end));
-    throw_on_error(cuEventDestroy(begin));
+  throw_on_error(cuModuleUnload(impl->module));
 
-    // TODO Test
-    cudaFree(x);
-    cudaFree(y);
-    cudaFree(result);
+  throw_on_error(cuEventDestroy(end));
+  throw_on_error(cuEventDestroy(begin));
 
-    return measurements;
+  return measurements;
 }

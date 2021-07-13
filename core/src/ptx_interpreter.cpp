@@ -1,4 +1,5 @@
 #include "ptx_interpreter.h"
+#include "string_processing.h"
 
 #include <vector>
 #include <iostream>
@@ -17,21 +18,6 @@ std::string_view extract_kernel_name(std::string_view ptx)
   auto kernel_name_pos = entry_pos + entry_kw.size();
   auto brace_pos = ptx.find('(', kernel_name_pos);
   return ptx.substr(kernel_name_pos, brace_pos - kernel_name_pos);
-}
-
-std::string_view trim(std::string_view str)
-{
-  str.remove_prefix(std::min(str.find_first_not_of("\t\n "), str.size()));
-
-  auto last_space = str.find_last_not_of("\t\n ");
-
-  if (last_space != std::string::npos)
-  {
-    last_space++;
-    str.remove_suffix(str.size() - last_space);
-  }
-
-  return str;
 }
 
 std::vector<std::string_view> split(const std::string_view str, const char delim = ',')
