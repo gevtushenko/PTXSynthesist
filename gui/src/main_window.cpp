@@ -379,7 +379,6 @@ MainWindow::MainWindow()
 
   // min_series.set_color("#BD93F9");
   // max_series.set_color("#FFB86C");
-  median_series.set_color("#50FA7B");
 
   y_axis = new QValueAxis();
   x_axis = new QCategoryAxis();
@@ -390,7 +389,6 @@ MainWindow::MainWindow()
 
   // min_series.add_to_chart(chart);
   // max_series.add_to_chart(chart);
-  median_series.add_to_chart(y_axis, x_axis, chart);
 
   QLegend *legend = chart->legend();
   legend->setLabelColor(QColor("#F8F8F2"));
@@ -460,6 +458,16 @@ void MainWindow::add()
   cuda_ptx_pairs.push_back(std::move(new_pair));
 }
 
+const char *MainWindow::get_new_color()
+{
+  constexpr unsigned int total_colors = 5;
+  const char *colors[total_colors] = {
+    "#50fa7b", "#f8f8f2", "#ff79c6", "#bd93f9", "#f1fa8c"
+  };
+
+  return colors[last_color_num++ % total_colors];
+}
+
 void MainWindow::execute()
 {
   unsigned int last_counter = plot_counter;
@@ -483,6 +491,9 @@ void MainWindow::execute()
   }
 
   std::vector<float> elapsed_times;
+  median_series.push_back(ScatterLineSeries());
+  median_series.back().set_color(get_new_color());
+  median_series.back().add_to_chart(y_axis, x_axis, chart);
 
   if (pairs_elapsed_times.size() == 1)
   {
@@ -494,7 +505,7 @@ void MainWindow::execute()
       x_axis->append(QString::number(plot_counter) + ": " + measurements[i].get_name(), plot_counter++);
     }
     x_axis->setRange(-1, plot_counter);
-    median_series.set_name("Elapsed time");
+    median_series.back().set_name("Elapsed time");
   }
   else if (pairs_elapsed_times.size() == 2)
   {
@@ -513,7 +524,7 @@ void MainWindow::execute()
     }
 
     x_axis->setRange(-1, plot_counter);
-    median_series.set_name("Speedup: " + cuda_ptx_pairs[0]->name + " / " + cuda_ptx_pairs[1]->name);
+    median_series.back().set_name("Speedup: " + cuda_ptx_pairs[0]->name + " / " + cuda_ptx_pairs[1]->name);
   }
 
   const float min_time = min(elapsed_times);
@@ -524,7 +535,7 @@ void MainWindow::execute()
 
   for (auto &time: elapsed_times)
   {
-    median_series.append(last_counter++, time);
+    median_series.back().append(last_counter++, time);
   }
 
   // chart->axes(Qt::Horizontal).back()->setRange(0, execution_id + 1);

@@ -85,8 +85,11 @@ public:
   std::vector<std::unique_ptr<CUDAPTXPair>> cuda_ptx_pairs;
 
   unsigned int plot_counter {};
+  unsigned int last_color_num {};
 
-  ScatterLineSeries median_series;
+  const char *get_new_color();
+
+  std::vector<ScatterLineSeries> median_series;
 
   QChartView *chart_view {};
   QChart *chart {};
