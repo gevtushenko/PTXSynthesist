@@ -24,6 +24,235 @@
 #include "ptx_highlighter.hpp"
 #include "syntax_style.h"
 
+CUDAPTXPair::CUDAPTXPair(const QString &name, MainWindow *main_window)
+  : timer(new QTimer())
+  , cuda(new CodeEditor())
+  , ptx(new CodeEditor())
+  , main_window(main_window)
+{
+  cuda->setHighlighter(new CUDAHighlighter());
+  ptx->setHighlighter(new PTXHighlighter());
+
+  cuda->setAcceptRichText(false);
+  cuda->setPlainText("\n"
+                     "// Vector add example\n"
+                     "\n"
+                     "// threads_in_block = 256\n"
+                     "// blocks_in_grid = (n + threads_in_block - 1) // threads_in_block\n"
+                     "// iterations = 10\n"
+                     "\n"
+                     "extern \"C\" __global__ void kernel(\n"
+                     "  int n        /* [2 ** x for x in range(18, 27)] */, \n"
+                     "  const int *x /* n * 4   */, \n"
+                     "  const int *y /* n * 4   */, \n"
+                     "  int *result  /* n * 4   */)\n"
+                     "{\n"
+                     "  for (int i = threadIdx.x + blockIdx.x * blockDim.x;\n"
+                     "       i < n;\n"
+                     "       i += blockDim.x * gridDim.x) \n"
+                     "  {\n"
+                     "    result[i] = x[i] + y[i];\n"
+                     "  }\n"
+                     "}\n");
+
+  QFont jet_brains_mono = QFont("JetBrains Mono", 12);
+
+  options = new QLineEdit();
+  options->setText("-lineinfo, --gpu-architecture=compute_75");
+  options->setFont(jet_brains_mono);
+
+  QLineEdit *src_name = new QLineEdit();
+  src_name->setText(name);
+  src_name->setFont(jet_brains_mono);
+
+  QObject::connect(options, &QLineEdit::textChanged, this, &CUDAPTXPair::reset_timer);
+  QObject::connect(cuda->document(), &QTextDocument::contentsChanged, this, &CUDAPTXPair::reset_timer);
+
+  cuda->setFont(jet_brains_mono);
+  cuda->setAutoIndentation(true);
+  cuda->setAutoParentheses(true);
+  cuda->setTabReplace(true);
+  cuda->setTabReplaceSize(2);
+
+  ptx->setFont(jet_brains_mono);
+  ptx->setReadOnly(true);
+
+  QVBoxLayout *v_cuda_layout = new QVBoxLayout();
+  v_cuda_layout->addWidget(src_name);
+  v_cuda_layout->addWidget(cuda);
+
+  QWidget *cuda_widget = new QWidget();
+  cuda_widget->setLayout(v_cuda_layout);
+
+  QVBoxLayout *v_ptx_layout = new QVBoxLayout();
+  v_ptx_layout->addWidget(options);
+  v_ptx_layout->addWidget(ptx);
+
+  QWidget *ptx_widget = new QWidget();
+  ptx_widget->setLayout(v_ptx_layout);
+
+  QDockWidget *cuda_dock_widget = new QDockWidget("cuda", main_window);
+  cuda_dock_widget->setWidget(cuda_widget);
+  cuda_dock_widget->setFeatures(cuda_dock_widget->features() & ~QDockWidget::DockWidgetClosable);
+  cuda_dock_widget->setAllowedAreas(Qt::AllDockWidgetAreas);
+  main_window->addDockWidget(Qt::LeftDockWidgetArea, cuda_dock_widget);
+
+  QDockWidget *ptx_dock_widget = new QDockWidget("ptx", main_window);
+  ptx_dock_widget->setWidget(ptx_widget);
+  ptx_dock_widget->setFeatures(ptx_dock_widget->features() & ~QDockWidget::DockWidgetClosable);
+  ptx_dock_widget->setAllowedAreas(Qt::AllDockWidgetAreas);
+  main_window->addDockWidget(Qt::RightDockWidgetArea, ptx_dock_widget);
+
+  timer->setSingleShot(true);
+  QObject::connect(timer, &QTimer::timeout, this, &CUDAPTXPair::regen_ptx);
+}
+
+std::vector<float> CUDAPTXPair::execute(PTXExecutor *executor)
+{
+  std::string ptx_code = ptx->toPlainText().toStdString();
+
+  return executor->execute(
+    get_params(),
+    ptx_code.c_str());
+}
+
+void CUDAPTXPair::reset_timer()
+{
+  timer->start(1000);
+
+  main_window->run_action->setEnabled(false);
+  main_window->interpret_action->setEnabled(false);
+}
+
+void CUDAPTXPair::regen_ptx()
+{
+  std::string cuda_source = cuda->toPlainText().toStdString();
+
+  QStringList options_list = options->text().split(',');
+  std::vector<std::string> str_options_list(options_list.size());
+  std::vector<const char *> c_str_options_list(options_list.size());
+
+  for (int i = 0; i < static_cast<int>(c_str_options_list.size()); i++)
+  {
+    str_options_list[i] = options_list[i].toStdString();
+    c_str_options_list[i] = str_options_list[i].c_str();
+  }
+
+  PTXGenerator generator;
+  std::optional<PTXCode> ptx_code = generator.gen(cuda_source.c_str(), c_str_options_list);
+
+  if (ptx_code)
+  {
+    ptx->setPlainText(ptx_code->get_ptx());
+  }
+  else
+  {
+    ptx->setPlainText("Compilation error");
+  }
+
+  main_window->run_action->setEnabled(true);
+  main_window->interpret_action->setEnabled(true);
+}
+
+void CUDAPTXPair::load_style(const QString &path, MainWindow *main_window)
+{
+  QFile fl(path);
+
+  if (!fl.open(QIODevice::ReadOnly))
+  {
+    return;
+  }
+
+  auto style = new SyntaxStyle(main_window);
+
+  if (!style->load(fl.readAll()))
+  {
+    delete style;
+    return;
+  }
+
+  cuda->setSyntaxStyle(style);
+  ptx->setSyntaxStyle(style);
+}
+
+KernelParameter get_int_param(const char *param_name, const QString &cuda_code)
+{
+  std::string result ("int ");
+  result += param_name;
+  result += " /* ";
+
+  QString search_pattern = param_name;
+  search_pattern += "\\s+=\\s*";
+
+  auto pattern_pos = cuda_code.lastIndexOf(QRegularExpression(search_pattern));
+  auto initializer_beg = cuda_code.indexOf('=', pattern_pos) + 1;
+  auto initializer_end = cuda_code.indexOf("\n", initializer_beg);
+
+  result += cuda_code.mid(initializer_beg, initializer_end - initializer_beg).toStdString();
+
+  result += " */";
+
+  return KernelParameter(result);
+}
+
+std::vector<std::string> split_params(QString params_str)
+{
+  std::vector<std::string> normalized_params;
+
+  // TODO The whole function is a mess. I'm sorry if you are here.
+  //      I'll fix it later
+  while(true)
+  {
+    const bool stop = params_str.back() == ')';
+
+    params_str = params_str.mid(0, params_str.size() - 1);
+
+    if (stop)
+    {
+      break;
+    }
+  }
+
+  QStringList lines = params_str.split('\n', Qt::SkipEmptyParts);
+
+  for(QString& line: lines)
+  {
+    line = line.trimmed();
+
+    if(line.back() == ',')
+    {
+      line = line.mid(0, line.size() - 1);
+    }
+
+    normalized_params.push_back(line.toStdString());
+  }
+
+  return normalized_params;
+}
+
+std::vector<KernelParameter> CUDAPTXPair::get_params()
+{
+  QString cuda_code = cuda->toPlainText();
+
+  const int global_idx = cuda_code.lastIndexOf("__global__");
+  const int params_start = cuda_code.indexOf('(', global_idx) + 1;
+  const int params_len = cuda_code.indexOf('{', params_start) - params_start;
+
+  std::vector<KernelParameter> result;
+
+  for (auto &param: split_params(cuda_code.mid(params_start, params_len)))
+  {
+    result.emplace_back(param);
+  }
+
+  result.push_back(get_int_param("iterations", cuda_code));
+  result.push_back(get_int_param("threads_in_block", cuda_code));
+  result.push_back(get_int_param("blocks_in_grid", cuda_code));
+
+  return result;
+}
+
+
 ScatterLineSeries::ScatterLineSeries()
     : line_series(new QLineSeries())
     , scatter_series(new QScatterSeries())
@@ -53,42 +282,13 @@ void ScatterLineSeries::append(int x, float y)
 }
 
 MainWindow::MainWindow()
-  : cuda(new CodeEditor())
-  , ptx(new CodeEditor())
-  , timer(new QTimer())
 {
-  cuda->setAcceptRichText(false);
-  cuda->setPlainText("\n"
-                     "// Vector add example\n"
-                     "\n"
-                     "// threads_in_block = 256\n"
-                     "// blocks_in_grid = (n + threads_in_block - 1) // threads_in_block\n"
-                     "// iterations = 10\n"
-                     "\n"
-                     "extern \"C\" __global__ void kernel(\n"
-                     "  int n        /* [2 ** x for x in range(18, 27)] */, \n"
-                     "  const int *x /* n * 4   */, \n"
-                     "  const int *y /* n * 4   */, \n"
-                     "  int *result  /* n * 4   */)\n"
-                     "{\n"
-                     "  for (int i = threadIdx.x + blockIdx.x * blockDim.x;\n"
-                     "       i < n;\n"
-                     "       i += blockDim.x * gridDim.x) \n"
-                     "  {\n"
-                     "    result[i] = x[i] + y[i];\n"
-                     "  }\n"
-                     "}\n");
-
-  add_editor();
-
   chart = new QChart();
   chart->setBackgroundBrush(QBrush(QColor("#282a36")));
 
   chart_view = new QChartView(chart);
   chart_view->setBackgroundBrush(QBrush(QColor("#282a36")));
   chart_view->setRenderHint(QPainter::Antialiasing);
-  // chart_view->setMaximumHeight(10);
-  // chart->setMaximumHeight(10);
 
   min_series.set_color("#BD93F9");
   max_series.set_color("#FFB86C");
@@ -103,8 +303,6 @@ MainWindow::MainWindow()
 
   chart->axes(Qt::Vertical).back()->setLabelsColor(QColor("#F8F8F2"));
   chart->axes(Qt::Horizontal).back()->setLabelsColor(QColor("#F8F8F2"));
-
-  timer->setSingleShot(true);
 
   tool_bar = addToolBar("Interpreter");
   QWidget* spacer = new QWidget();
@@ -121,13 +319,11 @@ MainWindow::MainWindow()
   QObject::connect(interpret_action, &QAction::triggered, this, &MainWindow::interpret);
   QObject::connect(run_action, &QAction::triggered, this, &MainWindow::execute);
 
-  QObject::connect(cuda->document(), &QTextDocument::contentsChanged, this, &MainWindow::reset_timer);
-  QObject::connect(timer, &QTimer::timeout, this, &MainWindow::regen_ptx);
+  cuda_ptx_pairs.push_back(std::make_unique<CUDAPTXPair>(QString("Source #1"), this));
+  cuda_ptx_pairs.push_back(std::make_unique<CUDAPTXPair>(QString("Source #2"), this));
+  cuda_ptx_pairs.back()->reset_timer();
 
   load_style(":/style/dracula.xml");
-
-  cuda->setHighlighter(new CUDAHighlighter());
-  ptx->setHighlighter(new PTXHighlighter());
 
   setStyleSheet("QToolBar {"
                 " background-color: #414450;"
@@ -192,203 +388,24 @@ MainWindow::MainWindow()
                 "QMainWindow {"
                 " background-color: #414450; "
                 "}");
-
-  reset_timer();
 }
 
 MainWindow::~MainWindow() = default;
 
-void MainWindow::add_editor()
-{
-  QFont jet_brains_mono = QFont("JetBrains Mono", 12);
-
-  options = new QLineEdit();
-  options->setText("-lineinfo, --gpu-architecture=compute_75");
-  options->setFont(jet_brains_mono);
-
-  QLineEdit *src_name = new QLineEdit();
-  src_name->setText("source_1");
-  src_name->setFont(jet_brains_mono);
-
-  QObject::connect(options, &QLineEdit::textChanged, this, &MainWindow::reset_timer);
-
-  cuda->setFont(jet_brains_mono);
-  cuda->setAutoIndentation(true);
-  cuda->setAutoParentheses(true);
-  cuda->setTabReplace(true);
-  cuda->setTabReplaceSize(2);
-
-  ptx->setFont(jet_brains_mono);
-  ptx->setReadOnly(true);
-
-  QVBoxLayout *v_cuda_layout = new QVBoxLayout();
-  v_cuda_layout->addWidget(src_name);
-  v_cuda_layout->addWidget(cuda);
-
-  QWidget *cuda_widget = new QWidget();
-  cuda_widget->setLayout(v_cuda_layout);
-
-  QVBoxLayout *v_ptx_layout = new QVBoxLayout();
-  v_ptx_layout->addWidget(options);
-  v_ptx_layout->addWidget(ptx);
-
-  QWidget *ptx_widget = new QWidget();
-  ptx_widget->setLayout(v_ptx_layout);
-
-  QDockWidget *cuda_dock_widget = new QDockWidget("cuda", this);
-  cuda_dock_widget->setWidget(cuda_widget);
-  cuda_dock_widget->setFeatures(cuda_dock_widget->features() & ~QDockWidget::DockWidgetClosable);
-  cuda_dock_widget->setAllowedAreas(Qt::AllDockWidgetAreas);
-  addDockWidget(Qt::LeftDockWidgetArea, cuda_dock_widget);
-
-  QDockWidget *ptx_dock_widget = new QDockWidget("ptx", this);
-  ptx_dock_widget->setWidget(ptx_widget);
-  ptx_dock_widget->setFeatures(ptx_dock_widget->features() & ~QDockWidget::DockWidgetClosable);
-  ptx_dock_widget->setAllowedAreas(Qt::AllDockWidgetAreas);
-  addDockWidget(Qt::RightDockWidgetArea, ptx_dock_widget);
-}
-
-KernelParameter get_int_param(const char *param_name, const QString &cuda_code)
-{
-  std::string result ("int ");
-  result += param_name;
-  result += " /* ";
-
-  QString search_pattern = param_name;
-  search_pattern += "\\s+=\\s*";
-
-  auto pattern_pos = cuda_code.lastIndexOf(QRegularExpression(search_pattern));
-  auto initializer_beg = cuda_code.indexOf('=', pattern_pos) + 1;
-  auto initializer_end = cuda_code.indexOf("\n", initializer_beg);
-
-  result += cuda_code.mid(initializer_beg, initializer_end - initializer_beg).toStdString();
-
-  result += " */";
-
-  return KernelParameter(result);
-}
-
-std::vector<std::string> split_params(QString params_str)
-{
-  std::vector<std::string> normalized_params;
-
-  // TODO The whole function is a mess. I'm sorry if you are here.
-  //      I'll fix it later
-  while(true)
-  {
-    const bool stop = params_str.back() == ')';
-
-    params_str = params_str.mid(0, params_str.size() - 1);
-
-    if (stop)
-    {
-      break;
-    }
-  }
-
-  QStringList lines = params_str.split('\n', Qt::SkipEmptyParts);
-
-  for(QString& line: lines)
-  {
-    line = line.trimmed();
-
-    if(line.back() == ',')
-    {
-      line = line.mid(0, line.size() - 1);
-    }
-
-    normalized_params.push_back(line.toStdString());
-  }
-
-  return normalized_params;
-}
-
-std::vector<KernelParameter> MainWindow::get_params()
-{
-  QString cuda_code = cuda->toPlainText();
-
-  const int global_idx = cuda_code.lastIndexOf("__global__");
-  const int params_start = cuda_code.indexOf('(', global_idx) + 1;
-  const int params_len = cuda_code.indexOf('{', params_start) - params_start;
-
-  std::vector<KernelParameter> result;
-
-  for (auto &param: split_params(cuda_code.mid(params_start, params_len)))
-  {
-    result.emplace_back(param);
-  }
-
-  result.push_back(get_int_param("iterations", cuda_code));
-  result.push_back(get_int_param("threads_in_block", cuda_code));
-  result.push_back(get_int_param("blocks_in_grid", cuda_code));
-
-  return result;
-}
-
 void MainWindow::load_style(QString path)
 {
-    QFile fl(path);
-
-    if (!fl.open(QIODevice::ReadOnly))
-    {
-        return;
-    }
-
-    auto style = new SyntaxStyle(this);
-
-    if (!style->load(fl.readAll()))
-    {
-        delete style;
-        return;
-    }
-
-    cuda->setSyntaxStyle(style);
-    ptx->setSyntaxStyle(style);
+  for (auto &cuda_ptx_pair: cuda_ptx_pairs)
+  {
+    cuda_ptx_pair->load_style(path, this);
+  }
 }
 
 void MainWindow::interpret()
 {
-  PTXInterpreter interpreter;
+  // TODO
+  // PTXInterpreter interpreter;
 
-  interpreter.interpret(ptx->toPlainText().toStdString());
-}
-
-void MainWindow::reset_timer()
-{
-  timer->start(1000);
-
-  run_action->setEnabled(false);
-  interpret_action->setEnabled(false);
-}
-
-void MainWindow::regen_ptx()
-{
-  std::string cuda_source = cuda->toPlainText().toStdString();
-
-  QStringList options_list = options->text().split(',');
-  std::vector<std::string> str_options_list(options_list.size());
-  std::vector<const char *> c_str_options_list(options_list.size());
-
-  for (int i = 0; i < static_cast<int>(c_str_options_list.size()); i++)
-  {
-    str_options_list[i] = options_list[i].toStdString();
-    c_str_options_list[i] = str_options_list[i].c_str();
-  }
-
-  PTXGenerator generator;
-  std::optional<PTXCode> ptx_code = generator.gen(cuda_source.c_str(), c_str_options_list);
-
-  if (ptx_code)
-  {
-    ptx->setPlainText(ptx_code->get_ptx());
-  }
-  else
-  {
-    ptx->setPlainText("Compilation error");
-  }
-
-  run_action->setEnabled(true);
-  interpret_action->setEnabled(true);
+  // interpreter.interpret(ptx->toPlainText().toStdString());
 }
 
 float avg(const std::vector<float> &measurements)
@@ -438,11 +455,29 @@ void MainWindow::execute()
     resizeDocks({chart_widget}, { 2 * height() / 3 }, Qt::Orientation::Vertical);
   }
 
-  std::string ptx_code = ptx->toPlainText().toStdString();
+  std::vector<std::vector<float>> pairs_elapsed_times(cuda_ptx_pairs.size());
 
-  std::vector<float> elapsed_times = executor->execute(
-    get_params(),
-    ptx_code.c_str());
+  for (std::size_t i = 0; i < cuda_ptx_pairs.size(); i++)
+  {
+    pairs_elapsed_times[i] = cuda_ptx_pairs[i]->execute(executor.get());
+  }
+
+  std::vector<float> elapsed_times;
+
+  if (pairs_elapsed_times.size() == 1)
+  {
+    elapsed_times = pairs_elapsed_times.back();
+  }
+  else if (pairs_elapsed_times.size() == 2)
+  {
+    if (pairs_elapsed_times[0].size() == pairs_elapsed_times[1].size())
+    {
+      for (std::size_t i = 0; i < pairs_elapsed_times[0].size(); i++)
+      {
+        elapsed_times.push_back(pairs_elapsed_times[0][i] / pairs_elapsed_times[1][i]);
+      }
+    }
+  }
 
   const float min_time = min(elapsed_times);
   const float max_time = max(elapsed_times);

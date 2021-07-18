@@ -32,6 +32,32 @@ class QTimer;
 
 class SyntaxStyle;
 class PTXExecutor;
+class MainWindow;
+
+class CUDAPTXPair : public QObject
+{
+  Q_OBJECT
+
+public:
+  CUDAPTXPair(const QString &name, MainWindow *main_window);
+
+  void load_style(const QString &path, MainWindow *main_window);
+  std::vector<KernelParameter> get_params();
+  std::vector<float> execute(PTXExecutor *executor);
+
+  QTimer *timer {};
+  QLineEdit *options {};
+  CodeEditor *cuda {};
+  CodeEditor *ptx {};
+
+  MainWindow *main_window;
+
+public slots:
+  void reset_timer();
+
+private slots:
+  void regen_ptx();
+};
 
 class ScatterLineSeries
 {
@@ -55,12 +81,9 @@ public:
   MainWindow();
   ~MainWindow();
 
-private:
-  QLineEdit *options {};
-  CodeEditor *cuda {};
-  CodeEditor *ptx {};
-  QTimer *timer {};
   QToolBar *tool_bar {};
+
+  std::vector<std::unique_ptr<CUDAPTXPair>> cuda_ptx_pairs;
 
   int execution_id {};
 
@@ -83,13 +106,7 @@ private:
 
   void load_style(QString path);
 
-  std::vector<KernelParameter> get_params();
-
-  void add_editor();
-
 private slots:
-  void reset_timer();
-  void regen_ptx();
   void interpret();
   void execute();
 };
