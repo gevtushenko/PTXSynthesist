@@ -28,8 +28,9 @@ float median(int begin, int end, const std::vector<float> &sorted_list)
   }
 }
 
-Measurement::Measurement(std::vector<float> &&elapsed_times)
-  : elapsed_times(elapsed_times)
+Measurement::Measurement(const std::string &name, std::vector<float> &&elapsed_times)
+  : name(name)
+  , elapsed_times(elapsed_times)
 {
   std::vector<float> sorted_times(elapsed_times);
   std::sort(sorted_times.begin(), sorted_times.end());
@@ -263,6 +264,22 @@ public:
   }
 };
 
+std::string param_values_to_name(const std::map<std::string, int> &kernel_params_values)
+{
+  if (kernel_params_values.empty())
+    return "";
+
+  std::string result;
+
+  for (auto [name, val]: kernel_params_values)
+  {
+    result += name + "=" + std::to_string(val) + ",";
+  }
+
+  result.pop_back();
+  return result;
+}
+
 std::vector<Measurement> PTXExecutor::execute(
   const std::vector<KernelParameter> &params,
   const char *code)
@@ -362,7 +379,8 @@ std::vector<Measurement> PTXExecutor::execute(
       cudaFree(arrays_memory[i]);
     }
 
-    measurements.emplace_back(std::move(elapsed_times));
+    measurements.emplace_back(param_values_to_name(kernel_params_values),
+                              std::move(elapsed_times));
   });
 
   throw_on_error(cuModuleUnload(impl->module));

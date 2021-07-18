@@ -18,11 +18,14 @@ class Measurement
   float median_time {};
   float max_time {};
 
+  std::string name;
   std::vector<float> elapsed_times;
 
 public:
-  Measurement(std::vector<float> &&elapsed_times);
+  Measurement(const std::string &name,
+              std::vector<float> &&elapsed_times);
 
+  [[nodiscard]] const char *get_name() const { return name.c_str(); }
   [[nodiscard]] float get_min() const { return min_time; }
   [[nodiscard]] float get_median() const { return median_time; }
   [[nodiscard]] float get_max() const { return max_time; }

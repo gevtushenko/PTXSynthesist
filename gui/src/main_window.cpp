@@ -2,6 +2,7 @@
 
 #include <QFile>
 #include <QTimer>
+#include <QLegend>
 #include <QToolBar>
 #include <QGroupBox>
 #include <QLineEdit>
@@ -96,7 +97,8 @@ const char *StyleSheet =
 
 
 CUDAPTXPair::CUDAPTXPair(const QString &name, MainWindow *main_window)
-  : timer(new QTimer())
+  : name(name)
+  , timer(new QTimer())
   , cuda(new CodeEditor())
   , ptx(new CodeEditor())
   , main_window(main_window)
@@ -357,8 +359,13 @@ void ScatterLineSeries::add_to_chart(QValueAxis *y_axis,
 
 void ScatterLineSeries::append(int x, float y)
 {
-    line_series->append(static_cast<double>(x), y);
-    scatter_series->append(static_cast<double>(x), y);
+  line_series->append(static_cast<double>(x), y);
+  scatter_series->append(static_cast<double>(x), y);
+}
+
+void ScatterLineSeries::set_name(QString name)
+{
+  line_series->setName(name);
 }
 
 MainWindow::MainWindow()
@@ -385,9 +392,9 @@ MainWindow::MainWindow()
   // max_series.add_to_chart(chart);
   median_series.add_to_chart(y_axis, x_axis, chart);
 
-  // chart->createDefaultAxes();
-
-  chart->legend()->hide();
+  QLegend *legend = chart->legend();
+  legend->setLabelColor(QColor("#F8F8F2"));
+  legend->setAlignment(Qt::AlignBottom);
 
   chart->axes(Qt::Vertical).back()->setLabelsColor(QColor("#F8F8F2"));
   chart->axes(Qt::Horizontal).back()->setLabelsColor(QColor("#F8F8F2"));
@@ -455,7 +462,7 @@ void MainWindow::add()
 
 void MainWindow::execute()
 {
-  execution_id++;
+  unsigned int last_counter = plot_counter;
 
   if (!executor)
   {
@@ -479,23 +486,34 @@ void MainWindow::execute()
 
   if (pairs_elapsed_times.size() == 1)
   {
-    for (std::size_t i = 0; i < pairs_elapsed_times[0].size(); i++)
+    const std::vector<Measurement> &measurements = pairs_elapsed_times[0];
+
+    for (std::size_t i = 0; i < measurements.size(); i++)
     {
-      elapsed_times.push_back(pairs_elapsed_times[0][i].get_median());
-      x_axis->append(QString::number(i), i + 1);
+      elapsed_times.push_back(measurements[i].get_median());
+      x_axis->append(QString::number(plot_counter) + ": " + measurements[i].get_name(), plot_counter++);
     }
-    x_axis->setRange(0, pairs_elapsed_times[0].size() + 1);
+    x_axis->setRange(-1, plot_counter);
+    median_series.set_name("Elapsed time");
   }
   else if (pairs_elapsed_times.size() == 2)
   {
     if (pairs_elapsed_times[0].size() == pairs_elapsed_times[1].size())
     {
-      for (std::size_t i = 0; i < pairs_elapsed_times[0].size(); i++)
+      const std::vector<Measurement> &base = pairs_elapsed_times[0];
+      const std::vector<Measurement> &cmp = pairs_elapsed_times[1];
+
+      for (std::size_t i = 0; i < base.size(); i++)
       {
-        elapsed_times.push_back(pairs_elapsed_times[0][i].get_median() / pairs_elapsed_times[1][i].get_median());
-        x_axis->append(QString::number(i), i);
+        float speedup = base[i].get_median() / cmp[i].get_median();
+        elapsed_times.push_back(speedup);
+
+        x_axis->append(QString::number(plot_counter) + ": " + base[i].get_name(), plot_counter++);
       }
     }
+
+    x_axis->setRange(-1, plot_counter);
+    median_series.set_name("Speedup: " + cuda_ptx_pairs[0]->name + " / " + cuda_ptx_pairs[1]->name);
   }
 
   const float min_time = min(elapsed_times);
@@ -506,7 +524,7 @@ void MainWindow::execute()
 
   for (auto &time: elapsed_times)
   {
-    median_series.append(execution_id++, time);
+    median_series.append(last_counter++, time);
   }
 
   // chart->axes(Qt::Horizontal).back()->setRange(0, execution_id + 1);

@@ -40,6 +40,7 @@ public:
   std::vector<KernelParameter> get_params();
   std::vector<Measurement> execute(PTXExecutor *executor);
 
+  QString name;
   QTimer *timer {};
   QLineEdit *options {};
   CodeEditor *cuda {};
@@ -68,6 +69,7 @@ public:
                       QChart *chart);
 
     void append(int x, float y);
+    void set_name(QString name);
 };
 
 class MainWindow : public QMainWindow
@@ -82,7 +84,7 @@ public:
 
   std::vector<std::unique_ptr<CUDAPTXPair>> cuda_ptx_pairs;
 
-  int execution_id {};
+  unsigned int plot_counter {};
 
   ScatterLineSeries median_series;
 
