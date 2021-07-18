@@ -404,7 +404,10 @@ MainWindow::MainWindow()
   spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
   add_action = new QAction(QIcon(":/icons/plus.png"), "Add", this);
+
   run_action = new QAction(QIcon(":/icons/play.png"), "Run", this);
+  run_action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+
   interpret_action = new QAction(QIcon(":/icons/bug.png"), "Interpret", this);
 
   tool_bar->addAction(add_action);
