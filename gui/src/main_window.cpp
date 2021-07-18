@@ -133,6 +133,7 @@ CUDAPTXPair::CUDAPTXPair(const QString &name, MainWindow *main_window)
   QLineEdit *src_name = new QLineEdit();
   src_name->setText(name);
   src_name->setFont(jet_brains_mono);
+  src_name->setReadOnly(true);
 
   QObject::connect(options, &QLineEdit::textChanged, this, &CUDAPTXPair::reset_timer);
   QObject::connect(cuda->document(), &QTextDocument::contentsChanged, this, &CUDAPTXPair::reset_timer);
@@ -160,13 +161,13 @@ CUDAPTXPair::CUDAPTXPair(const QString &name, MainWindow *main_window)
   QWidget *ptx_widget = new QWidget();
   ptx_widget->setLayout(v_ptx_layout);
 
-  QDockWidget *cuda_dock_widget = new QDockWidget("cuda", main_window);
+  QDockWidget *cuda_dock_widget = new QDockWidget(name, main_window);
   cuda_dock_widget->setWidget(cuda_widget);
   cuda_dock_widget->setFeatures(cuda_dock_widget->features() & ~QDockWidget::DockWidgetClosable);
   cuda_dock_widget->setAllowedAreas(Qt::AllDockWidgetAreas);
   main_window->addDockWidget(Qt::LeftDockWidgetArea, cuda_dock_widget);
 
-  QDockWidget *ptx_dock_widget = new QDockWidget("ptx", main_window);
+  QDockWidget *ptx_dock_widget = new QDockWidget(name + " PTX", main_window);
   ptx_dock_widget->setWidget(ptx_widget);
   ptx_dock_widget->setFeatures(ptx_dock_widget->features() & ~QDockWidget::DockWidgetClosable);
   ptx_dock_widget->setAllowedAreas(Qt::AllDockWidgetAreas);
