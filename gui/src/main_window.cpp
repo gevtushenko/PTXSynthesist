@@ -133,6 +133,24 @@ MainWindow::MainWindow()
                 " background-color: #414450;"
                 "}"
                 ""
+                "QDockWidget {"
+                " background-color: #414450;"
+                " color: #414450; "
+                "}"
+                ""
+                "QTabBar::tab {"
+                " color: #F8F8F2; "
+                " background: #44475a; "
+                " border: 0.5px solid #f8f8f2;\n"
+                " min-width: 8ex;\n"
+                " padding: 2px;\n"
+                " margin: 2px 0px 2px 0px;\n"
+                "}"
+                ""
+                "QTabBar::tab:selected, QTabBar::tab:hover {"
+                " background: #6272a4; "
+                "}"
+                ""
                 "QTableWidget {"
                 " background-color: #414450;"
                 " color: #F8F8F2; "
@@ -220,11 +238,13 @@ void MainWindow::add_editor()
   QDockWidget *cuda_dock_widget = new QDockWidget("cuda", this);
   cuda_dock_widget->setWidget(cuda_widget);
   cuda_dock_widget->setFeatures(cuda_dock_widget->features() & ~QDockWidget::DockWidgetClosable);
+  cuda_dock_widget->setAllowedAreas(Qt::AllDockWidgetAreas);
   addDockWidget(Qt::LeftDockWidgetArea, cuda_dock_widget);
 
   QDockWidget *ptx_dock_widget = new QDockWidget("ptx", this);
   ptx_dock_widget->setWidget(ptx_widget);
   ptx_dock_widget->setFeatures(ptx_dock_widget->features() & ~QDockWidget::DockWidgetClosable);
+  ptx_dock_widget->setAllowedAreas(Qt::AllDockWidgetAreas);
   addDockWidget(Qt::RightDockWidgetArea, ptx_dock_widget);
 }
 
