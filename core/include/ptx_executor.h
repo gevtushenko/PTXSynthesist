@@ -34,16 +34,23 @@ public:
 
 class PTXExecutor
 {
-public:
-    PTXExecutor();
-    ~PTXExecutor();
+  int device_id {};
+  int device_count {};
 
-    std::vector<Measurement> execute(
-      const std::vector<KernelParameter> &params,
-      const char *code);
+  std::unique_ptr<char[]> device_name;
+
+public:
+  PTXExecutor(int device_id, bool initialize = false);
+  ~PTXExecutor();
+
+  int get_device_count() const { return device_count; }
+  const char *get_device_name() const;
+
+  std::vector<Measurement> execute(const std::vector<KernelParameter> &params,
+                                   const char *code);
 
 private:
-    std::unique_ptr<PTXExecutorImpl> impl;
+  std::unique_ptr<PTXExecutorImpl> impl;
 };
 
 #endif //PTXSYNTHESIST_PTX_EXECUTOR_H

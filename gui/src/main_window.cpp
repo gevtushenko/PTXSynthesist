@@ -18,6 +18,8 @@
 
 #include <QCategoryAxis>
 
+#include <iostream>
+
 #include "ptx_executor.h"
 #include "ptx_generator.h"
 #include "ptx_interpreter.h"
@@ -131,7 +133,7 @@ CUDAPTXPair::CUDAPTXPair(const QString &name, MainWindow *main_window)
   QFont jet_brains_mono = QFont("JetBrains Mono", 12);
 
   options = new QLineEdit();
-  options->setText("-lineinfo, --gpu-architecture=compute_75");
+  options->setText("-lineinfo, --gpu-architecture=compute_52");
   options->setFont(jet_brains_mono);
 
   QLineEdit *src_name = new QLineEdit();
@@ -470,11 +472,26 @@ const char *MainWindow::get_new_color()
 
 void MainWindow::execute()
 {
-  unsigned int last_counter = plot_counter;
-
-  if (!executor)
+  if (executors.empty())
   {
-    executor = std::make_unique<PTXExecutor>();
+    try {
+      std::unique_ptr<PTXExecutor> executor = std::make_unique<PTXExecutor>(0, true);
+      int total_devices = executor->get_device_count();
+
+      if (total_devices >= 1)
+      {
+        executors.push_back(std::move(executor));
+
+        for (int device_id = 1; device_id < total_devices; device_id++)
+        {
+          executors.push_back(std::make_unique<PTXExecutor>(device_id));
+        }
+      }
+    }
+    catch (...)
+    {
+      return;
+    }
 
     QDockWidget *chart_widget = new QDockWidget("chart", this);
     chart_widget->setWidget(chart_view);
@@ -483,61 +500,91 @@ void MainWindow::execute()
     resizeDocks({chart_widget}, { 2 * height() / 3 }, Qt::Orientation::Vertical);
   }
 
-  std::vector<std::vector<Measurement>> pairs_elapsed_times(cuda_ptx_pairs.size());
+  unsigned int plot_counter_base = global_plot_counter;
 
-  for (std::size_t i = 0; i < cuda_ptx_pairs.size(); i++)
+  for (std::size_t eid = 0; eid < executors.size(); eid++)
   {
-    pairs_elapsed_times[i] = cuda_ptx_pairs[i]->execute(executor.get());
-  }
+    PTXExecutor *executor = executors[eid].get();
 
-  std::vector<float> elapsed_times;
-  median_series.push_back(ScatterLineSeries());
-  median_series.back().set_color(get_new_color());
-  median_series.back().add_to_chart(y_axis, x_axis, chart);
+    unsigned int plot_counter = plot_counter_base;
+    unsigned int last_counter = plot_counter;
+    std::vector<std::vector<Measurement>> pairs_elapsed_times(cuda_ptx_pairs.size());
 
-  if (pairs_elapsed_times.size() == 1)
-  {
-    const std::vector<Measurement> &measurements = pairs_elapsed_times[0];
-
-    for (std::size_t i = 0; i < measurements.size(); i++)
+    for (std::size_t i = 0; i < cuda_ptx_pairs.size(); i++)
     {
-      elapsed_times.push_back(measurements[i].get_median());
-      x_axis->append(QString::number(plot_counter) + ": " + measurements[i].get_name(), plot_counter++);
+      pairs_elapsed_times[i] = cuda_ptx_pairs[i]->execute(executor);
     }
-    x_axis->setRange(-1, plot_counter);
-    median_series.back().set_name("Elapsed time");
-  }
-  else if (pairs_elapsed_times.size() == 2)
-  {
-    if (pairs_elapsed_times[0].size() == pairs_elapsed_times[1].size())
-    {
-      const std::vector<Measurement> &base = pairs_elapsed_times[0];
-      const std::vector<Measurement> &cmp = pairs_elapsed_times[1];
 
-      for (std::size_t i = 0; i < base.size(); i++)
+    std::vector<float> elapsed_times;
+    median_series.push_back(ScatterLineSeries());
+    median_series.back().set_color(get_new_color());
+    median_series.back().add_to_chart(y_axis, x_axis, chart);
+
+    if (pairs_elapsed_times.size() == 1)
+    {
+      const std::vector<Measurement> &measurements = pairs_elapsed_times[0];
+
+      for (std::size_t i = 0; i < measurements.size(); i++)
       {
-        float speedup = base[i].get_median() / cmp[i].get_median();
-        elapsed_times.push_back(speedup);
+        elapsed_times.push_back(measurements[i].get_median());
+        std::cout << elapsed_times.back() << "\n";
 
-        x_axis->append(QString::number(plot_counter) + ": " + base[i].get_name(), plot_counter++);
+        if (eid == 0)
+        {
+          x_axis->append(QString::number(plot_counter) + ": " + measurements[i].get_name(), plot_counter++);
+        }
       }
+
+      if (eid == 0)
+      {
+        x_axis->setRange(-1, plot_counter);
+      }
+
+      median_series.back().set_name(QString("Elapsed time: ") + executor->get_device_name());
+    }
+    else if (pairs_elapsed_times.size() == 2)
+    {
+      if (pairs_elapsed_times[0].size() == pairs_elapsed_times[1].size())
+      {
+        const std::vector<Measurement> &base = pairs_elapsed_times[0];
+        const std::vector<Measurement> &cmp = pairs_elapsed_times[1];
+
+        for (std::size_t i = 0; i < base.size(); i++)
+        {
+          float speedup = base[i].get_median() / cmp[i].get_median();
+          elapsed_times.push_back(speedup);
+
+          if (eid == 0)
+          {
+            x_axis->append(QString::number(plot_counter) + ": " + base[i].get_name(), plot_counter++);
+          }
+        }
+      }
+
+      if (eid == 0)
+      {
+        x_axis->setRange(-1, plot_counter);
+      }
+      median_series.back().set_name(QString("Speedup ") + executor->get_device_name() + ": " + cuda_ptx_pairs[0]->name + " / " + cuda_ptx_pairs[1]->name);
     }
 
-    x_axis->setRange(-1, plot_counter);
-    median_series.back().set_name("Speedup: " + cuda_ptx_pairs[0]->name + " / " + cuda_ptx_pairs[1]->name);
+    const float min_time = min(elapsed_times);
+    const float max_time = max(elapsed_times);
+
+    min_elapsed = std::min(min_elapsed, min_time);
+    max_elapsed = std::max(max_elapsed, max_time);
+
+    for (auto &time: elapsed_times)
+    {
+      median_series.back().append(last_counter++, time);
+    }
+
+    // chart->axes(Qt::Horizontal).back()->setRange(0, execution_id + 1);
+    y_axis->setRange(-0.1, max_elapsed + max_elapsed / 4);
+
+    if (eid == 0)
+    {
+      global_plot_counter = plot_counter;
+    }
   }
-
-  const float min_time = min(elapsed_times);
-  const float max_time = max(elapsed_times);
-
-  min_elapsed = std::min(min_elapsed, min_time);
-  max_elapsed = std::max(max_elapsed, max_time);
-
-  for (auto &time: elapsed_times)
-  {
-    median_series.back().append(last_counter++, time);
-  }
-
-  // chart->axes(Qt::Horizontal).back()->setRange(0, execution_id + 1);
-  y_axis->setRange(-0.1, max_elapsed + max_elapsed / 4);
 }

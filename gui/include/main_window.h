@@ -84,7 +84,7 @@ public:
 
   std::vector<std::unique_ptr<CUDAPTXPair>> cuda_ptx_pairs;
 
-  unsigned int plot_counter {};
+  unsigned int global_plot_counter {};
   unsigned int last_color_num {};
 
   const char *get_new_color();
@@ -105,7 +105,7 @@ public:
   QAction *run_action {};
   QAction *interpret_action {};
 
-  std::unique_ptr<PTXExecutor> executor;
+  std::vector<std::unique_ptr<PTXExecutor>> executors;
 
 private slots:
   void add();

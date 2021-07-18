@@ -56,34 +56,49 @@ struct PTXExecutorImpl
     CUfunction kernel;
 };
 
-PTXExecutor::PTXExecutor()
-    : impl(new PTXExecutorImpl())
+PTXExecutor::PTXExecutor(int device_id, bool initialize)
+    : device_id(device_id)
+    , impl(new PTXExecutorImpl())
 {
   try {
-    throw_on_error(cuInit(0));
+    if (initialize)
+    {
+      throw_on_error(cuInit(0));
+    }
 
-    int device_count = 0;
+    device_count = 0;
     throw_on_error(cuDeviceGetCount(&device_count));
 
-    if (device_count == 0)
+    if (device_id >= device_count)
     {
       throw std::runtime_error("No GPU available");
     }
 
-    throw_on_error(cuDeviceGet(&impl->device, 0));
+    throw_on_error(cuDeviceGet(&impl->device, device_id));
     throw_on_error(cuCtxCreate(&impl->context, 0, impl->device));
+
+    int max_device_name_length = 250;
+    device_name.reset(new char[max_device_name_length]);
+
+    throw_on_error(
+      cuDeviceGetName(device_name.get(), max_device_name_length, impl->device));
   }
   catch(...) {
     impl.reset();
   }
 }
 
+const char * PTXExecutor::get_device_name() const
+{
+  return device_name.get();
+}
+
 PTXExecutor::~PTXExecutor()
 {
-    if (impl)
-    {
-      throw_on_error(cuCtxDestroy (impl->context));
-    }
+  if (impl)
+  {
+    throw_on_error(cuCtxDestroy(impl->context));
+  }
 }
 
 bool is_list(const py::handle &obj)
@@ -284,6 +299,8 @@ std::vector<Measurement> PTXExecutor::execute(
   const std::vector<KernelParameter> &params,
   const char *code)
 {
+  throw_on_error(cuCtxSetCurrent(impl->context));
+
   py::scoped_interpreter guard{};
   using namespace py::literals;
 
