@@ -16,6 +16,7 @@ QT_CHARTS_USE_NAMESPACE
 #include <memory>
 
 #include "kernel_param.h"
+#include "ptx_executor.h"
 
 enum class InputType
 {
@@ -31,7 +32,6 @@ class QToolBar;
 class QTimer;
 
 class SyntaxStyle;
-class PTXExecutor;
 class MainWindow;
 
 class CUDAPTXPair : public QObject
@@ -43,7 +43,7 @@ public:
 
   void load_style(const QString &path, MainWindow *main_window);
   std::vector<KernelParameter> get_params();
-  std::vector<float> execute(PTXExecutor *executor);
+  std::vector<Measurement> execute(PTXExecutor *executor);
 
   QTimer *timer {};
   QLineEdit *options {};

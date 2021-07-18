@@ -12,6 +12,33 @@
 
 namespace py = pybind11;
 
+float median(int begin, int end, const std::vector<float> &sorted_list)
+{
+  int count = end - begin;
+
+  if (count % 2)
+  {
+    return sorted_list.at(count / 2 + begin);
+  }
+  else
+  {
+    float right = sorted_list.at(count / 2 + begin);
+    float left = sorted_list.at(count / 2 - 1 + begin);
+    return (right + left) / 2.0;
+  }
+}
+
+Measurement::Measurement(std::vector<float> &&elapsed_times)
+  : elapsed_times(elapsed_times)
+{
+  std::vector<float> sorted_times(elapsed_times);
+  std::sort(sorted_times.begin(), sorted_times.end());
+
+  min_time = sorted_times.front();
+  median_time = median(0, sorted_times.size(), sorted_times);
+  max_time = sorted_times.back();
+}
+
 void throw_on_error(CUresult status)
 {
     if (status != CUDA_SUCCESS)
@@ -236,14 +263,14 @@ public:
   }
 };
 
-std::vector<float> PTXExecutor::execute(
+std::vector<Measurement> PTXExecutor::execute(
   const std::vector<KernelParameter> &params,
   const char *code)
 {
   py::scoped_interpreter guard{};
   using namespace py::literals;
 
-  std::vector<float> measurements;
+  std::vector<Measurement> measurements;
 
   // iterations, block size, grid size
   const unsigned int predefined_params_number = 3;
@@ -296,42 +323,46 @@ std::vector<float> PTXExecutor::execute(
     const unsigned int threads_in_block = values["threads_in_block"].cast<int>();
     const unsigned int blocks_in_grid = values["blocks_in_grid"].cast<int>();
 
-    throw_on_error(cuEventRecord(begin, 0));
+    std::vector<float> elapsed_times(iterations);
 
-    throw_on_error(cuLaunchKernel(impl->kernel,
+    for (unsigned int i = 0; i < iterations; i++)
+    {
+      throw_on_error(cuEventRecord(begin, 0));
 
-                                  // gridDim
-                                  blocks_in_grid,
-                                  1,
-                                  1,
+      throw_on_error(cuLaunchKernel(impl->kernel,
 
-                                  // blockDim
-                                  threads_in_block,
-                                  1,
-                                  1,
+                                    // gridDim
+                                    blocks_in_grid,
+                                    1,
+                                    1,
 
-                                  // Shmem
-                                  0,
+                                    // blockDim
+                                    threads_in_block,
+                                    1,
+                                    1,
 
-                                  // Stream
-                                  0,
+                                    // Shmem
+                                    0,
 
-                                  // Params
-                                  kernel_params.get(),
-                                  nullptr));
+                                    // Stream
+                                    0,
 
-    throw_on_error(cuEventRecord(end, 0));
-    throw_on_error(cuEventSynchronize(end));
+                                    // Params
+                                    kernel_params.get(),
+                                    nullptr));
 
-    float ms {};
-    cuEventElapsedTime(&ms, begin, end);
+      throw_on_error(cuEventRecord(end, 0));
+      throw_on_error(cuEventSynchronize(end));
+
+      cuEventElapsedTime(&elapsed_times[i], begin, end);
+    }
 
     for (int i = 0; i < array_id; i++)
     {
       cudaFree(arrays_memory[i]);
     }
 
-    measurements.push_back(ms);
+    measurements.emplace_back(std::move(elapsed_times));
   });
 
   throw_on_error(cuModuleUnload(impl->module));

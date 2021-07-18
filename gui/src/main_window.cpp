@@ -177,7 +177,7 @@ CUDAPTXPair::CUDAPTXPair(const QString &name, MainWindow *main_window)
   QObject::connect(timer, &QTimer::timeout, this, &CUDAPTXPair::regen_ptx);
 }
 
-std::vector<float> CUDAPTXPair::execute(PTXExecutor *executor)
+std::vector<Measurement> CUDAPTXPair::execute(PTXExecutor *executor)
 {
   std::string ptx_code = ptx->toPlainText().toStdString();
 
@@ -423,22 +423,6 @@ float max(const std::vector<float> &measurements)
   return *std::max_element(measurements.begin(), measurements.end());
 }
 
-float median(int begin, int end, const std::vector<float> &sorted_list)
-{
-    int count = end - begin;
-
-    if (count % 2)
-    {
-        return sorted_list.at(count / 2 + begin);
-    }
-    else
-    {
-        float right = sorted_list.at(count / 2 + begin);
-        float left = sorted_list.at(count / 2 - 1 + begin);
-        return (right + left) / 2.0;
-    }
-}
-
 void MainWindow::add()
 {
   const std::size_t new_src_id = cuda_ptx_pairs.size();
@@ -466,7 +450,7 @@ void MainWindow::execute()
     resizeDocks({chart_widget}, { 2 * height() / 3 }, Qt::Orientation::Vertical);
   }
 
-  std::vector<std::vector<float>> pairs_elapsed_times(cuda_ptx_pairs.size());
+  std::vector<std::vector<Measurement>> pairs_elapsed_times(cuda_ptx_pairs.size());
 
   for (std::size_t i = 0; i < cuda_ptx_pairs.size(); i++)
   {
@@ -477,7 +461,10 @@ void MainWindow::execute()
 
   if (pairs_elapsed_times.size() == 1)
   {
-    elapsed_times = pairs_elapsed_times.back();
+    for (auto &measurement: pairs_elapsed_times[0])
+    {
+      elapsed_times.push_back(measurement.get_median());
+    }
   }
   else if (pairs_elapsed_times.size() == 2)
   {
@@ -485,7 +472,7 @@ void MainWindow::execute()
     {
       for (std::size_t i = 0; i < pairs_elapsed_times[0].size(); i++)
       {
-        elapsed_times.push_back(pairs_elapsed_times[0][i] / pairs_elapsed_times[1][i]);
+        elapsed_times.push_back(pairs_elapsed_times[0][i].get_median() / pairs_elapsed_times[1][i].get_median());
       }
     }
   }
