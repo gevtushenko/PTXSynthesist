@@ -7,10 +7,11 @@
 #include <QLineEdit>
 #include <QComboBox>
 #include <QTextEdit>
+#include <QValueAxis>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
-#include <QValueAxis>
 #include <QHeaderView>
+#include <QDockWidget>
 #include <QTableWidget>
 #include <QBarCategoryAxis>
 
@@ -52,13 +53,10 @@ void ScatterLineSeries::append(int x, float y)
 }
 
 MainWindow::MainWindow()
-  : options(new QLineEdit())
-  , cuda(new CodeEditor())
+  : cuda(new CodeEditor())
   , ptx(new CodeEditor())
   , timer(new QTimer())
 {
-  options->setText("-lineinfo, --gpu-architecture=compute_75");
-
   cuda->setAcceptRichText(false);
   cuda->setPlainText("\n"
                      "// Vector add example\n"
@@ -81,13 +79,7 @@ MainWindow::MainWindow()
                      "  }\n"
                      "}\n");
 
-  QHBoxLayout *h_layout = new QHBoxLayout();
-  h_layout->addWidget(cuda, 4);
-  h_layout->addWidget(ptx, 4);
-
-  QVBoxLayout *v_layout = new QVBoxLayout();
-  v_layout->addWidget(options);
-  v_layout->addLayout(h_layout);
+  add_editor();
 
   chart = new QChart();
   chart->setBackgroundBrush(QBrush(QColor("#282a36")));
@@ -95,7 +87,8 @@ MainWindow::MainWindow()
   chart_view = new QChartView(chart);
   chart_view->setBackgroundBrush(QBrush(QColor("#282a36")));
   chart_view->setRenderHint(QPainter::Antialiasing);
-  chart_view->hide();
+  // chart_view->setMaximumHeight(10);
+  // chart->setMaximumHeight(10);
 
   min_series.set_color("#BD93F9");
   max_series.set_color("#FFB86C");
@@ -110,13 +103,6 @@ MainWindow::MainWindow()
 
   chart->axes(Qt::Vertical).back()->setLabelsColor(QColor("#F8F8F2"));
   chart->axes(Qt::Horizontal).back()->setLabelsColor(QColor("#F8F8F2"));
-
-  v_layout->addWidget(chart_view);
-
-  QWidget *central_widget = new QWidget();
-  central_widget->setLayout(v_layout);
-
-  setCentralWidget(central_widget);
 
   timer->setSingleShot(true);
 
@@ -136,20 +122,7 @@ MainWindow::MainWindow()
   QObject::connect(run_action, &QAction::triggered, this, &MainWindow::execute);
 
   QObject::connect(cuda->document(), &QTextDocument::contentsChanged, this, &MainWindow::reset_timer);
-  QObject::connect(options, &QLineEdit::textChanged, this, &MainWindow::reset_timer);
   QObject::connect(timer, &QTimer::timeout, this, &MainWindow::regen_ptx);
-
-  QFont jet_brains_mono = QFont("JetBrains Mono", 12);
-  cuda->setFont(jet_brains_mono);
-  options->setFont(jet_brains_mono);
-
-  cuda->setAutoIndentation(true);
-  cuda->setAutoParentheses(true);
-  cuda->setTabReplace(true);
-  cuda->setTabReplaceSize(2);
-
-  ptx->setFont(jet_brains_mono);
-  ptx->setReadOnly(true);
 
   load_style(":/style/dracula.xml");
 
@@ -207,7 +180,53 @@ MainWindow::MainWindow()
 
 MainWindow::~MainWindow() = default;
 
-#include <iostream>
+void MainWindow::add_editor()
+{
+  QFont jet_brains_mono = QFont("JetBrains Mono", 12);
+
+  options = new QLineEdit();
+  options->setText("-lineinfo, --gpu-architecture=compute_75");
+  options->setFont(jet_brains_mono);
+
+  QLineEdit *src_name = new QLineEdit();
+  src_name->setText("source_1");
+  src_name->setFont(jet_brains_mono);
+
+  QObject::connect(options, &QLineEdit::textChanged, this, &MainWindow::reset_timer);
+
+  cuda->setFont(jet_brains_mono);
+  cuda->setAutoIndentation(true);
+  cuda->setAutoParentheses(true);
+  cuda->setTabReplace(true);
+  cuda->setTabReplaceSize(2);
+
+  ptx->setFont(jet_brains_mono);
+  ptx->setReadOnly(true);
+
+  QVBoxLayout *v_cuda_layout = new QVBoxLayout();
+  v_cuda_layout->addWidget(src_name);
+  v_cuda_layout->addWidget(cuda);
+
+  QWidget *cuda_widget = new QWidget();
+  cuda_widget->setLayout(v_cuda_layout);
+
+  QVBoxLayout *v_ptx_layout = new QVBoxLayout();
+  v_ptx_layout->addWidget(options);
+  v_ptx_layout->addWidget(ptx);
+
+  QWidget *ptx_widget = new QWidget();
+  ptx_widget->setLayout(v_ptx_layout);
+
+  QDockWidget *cuda_dock_widget = new QDockWidget("cuda", this);
+  cuda_dock_widget->setWidget(cuda_widget);
+  cuda_dock_widget->setFeatures(cuda_dock_widget->features() & ~QDockWidget::DockWidgetClosable);
+  addDockWidget(Qt::LeftDockWidgetArea, cuda_dock_widget);
+
+  QDockWidget *ptx_dock_widget = new QDockWidget("ptx", this);
+  ptx_dock_widget->setWidget(ptx_widget);
+  ptx_dock_widget->setFeatures(ptx_dock_widget->features() & ~QDockWidget::DockWidgetClosable);
+  addDockWidget(Qt::RightDockWidgetArea, ptx_dock_widget);
+}
 
 KernelParameter get_int_param(const char *param_name, const QString &cuda_code)
 {
@@ -391,7 +410,12 @@ void MainWindow::execute()
   if (!executor)
   {
     executor = std::make_unique<PTXExecutor>();
-    chart_view->show();
+
+    QDockWidget *chart_widget = new QDockWidget("chart", this);
+    chart_widget->setWidget(chart_view);
+    chart_widget->setFeatures(chart_widget->features() & ~QDockWidget::DockWidgetClosable);
+    addDockWidget(Qt::BottomDockWidgetArea, chart_widget);
+    resizeDocks({chart_widget}, { 2 * height() / 3 }, Qt::Orientation::Vertical);
   }
 
   std::string ptx_code = ptx->toPlainText().toStdString();

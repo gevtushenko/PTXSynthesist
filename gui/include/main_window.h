@@ -82,9 +82,10 @@ private:
   std::unique_ptr<PTXExecutor> executor;
 
   void load_style(QString path);
-  void parse_params();
 
   std::vector<KernelParameter> get_params();
+
+  void add_editor();
 
 private slots:
   void reset_timer();
