@@ -24,6 +24,75 @@
 #include "ptx_highlighter.hpp"
 #include "syntax_style.h"
 
+const char *StyleSheet =
+  "QToolBar {"
+  " background-color: #282a36;"
+  "}"
+  "QTextEdit {"
+  " background-color: #282A36;"
+  "}"
+  ""
+  "QDockWidget {"
+  " background-color: #414450;"
+  " color: #414450; "
+  "}"
+  ""
+  "QTabBar::tab {"
+  " color: #F8F8F2; "
+  " background: #44475a; "
+  " border: 0.5px solid #f8f8f2;\n"
+  " min-width: 8ex;\n"
+  " padding: 2px;\n"
+  " margin: 2px 0px 2px 0px;\n"
+  "}"
+  ""
+  "QTabBar::tab:selected, QTabBar::tab:hover {"
+  " background: #6272a4; "
+  "}"
+  ""
+  "QTableWidget {"
+  " background-color: #414450;"
+  " color: #F8F8F2; "
+  "}"
+  ""
+  "QGroupBox {"
+  " background-color: #414450;"
+  " color: #F8F8F2; "
+  "}"
+  ""
+  "QComboBox {"
+  " background-color: #414450;"
+  " color: #F8F8F2; "
+  "}"
+  ""
+  "QToolButton {"
+  " max-width: 15px; "
+  " max-height: 15px; "
+  " margin: 8px 4px; "
+  "}"
+  ""
+  "QToolButton:hover {"
+  " background-color: #282a36; "
+  "}"
+  ""
+  "QLineEdit {"
+  " background-color: #282a36; "
+  " color: #F8F8F2; "
+  "}"
+  ""
+  "QScrollBar:vertical {"
+  "    padding: 0px 0px 0px 0px;"
+  "    background: #282a36;"
+  "}"
+  "QScrollBar::handle:vertical {"
+  "    background: #4c4d56;"
+  "}"
+  ""
+  "QMainWindow {"
+  " background-color: #414450; "
+  "}";
+
+
 CUDAPTXPair::CUDAPTXPair(const QString &name, MainWindow *main_window)
   : timer(new QTimer())
   , cuda(new CodeEditor())
@@ -307,98 +376,27 @@ MainWindow::MainWindow()
   tool_bar = addToolBar("Interpreter");
   QWidget* spacer = new QWidget();
   spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-  tool_bar->addWidget(spacer);
 
+  add_action = new QAction(QIcon(":/icons/plus.png"), "Add", this);
   run_action = new QAction(QIcon(":/icons/play.png"), "Run", this);
   interpret_action = new QAction(QIcon(":/icons/bug.png"), "Interpret", this);
 
+  tool_bar->addAction(add_action);
+  tool_bar->addWidget(spacer);
   tool_bar->addAction(run_action);
   tool_bar->addAction(interpret_action);
   tool_bar->setMovable(false);
 
+  QObject::connect(add_action, &QAction::triggered, this, &MainWindow::add);
   QObject::connect(interpret_action, &QAction::triggered, this, &MainWindow::interpret);
   QObject::connect(run_action, &QAction::triggered, this, &MainWindow::execute);
 
-  cuda_ptx_pairs.push_back(std::make_unique<CUDAPTXPair>(QString("Source #1"), this));
-  cuda_ptx_pairs.push_back(std::make_unique<CUDAPTXPair>(QString("Source #2"), this));
-  cuda_ptx_pairs.back()->reset_timer();
+  add();
 
-  load_style(":/style/dracula.xml");
-
-  setStyleSheet("QToolBar {"
-                " background-color: #414450;"
-                "}"
-                ""
-                "QDockWidget {"
-                " background-color: #414450;"
-                " color: #414450; "
-                "}"
-                ""
-                "QTabBar::tab {"
-                " color: #F8F8F2; "
-                " background: #44475a; "
-                " border: 0.5px solid #f8f8f2;\n"
-                " min-width: 8ex;\n"
-                " padding: 2px;\n"
-                " margin: 2px 0px 2px 0px;\n"
-                "}"
-                ""
-                "QTabBar::tab:selected, QTabBar::tab:hover {"
-                " background: #6272a4; "
-                "}"
-                ""
-                "QTableWidget {"
-                " background-color: #414450;"
-                " color: #F8F8F2; "
-                "}"
-                ""
-                "QGroupBox {"
-                " background-color: #414450;"
-                " color: #F8F8F2; "
-                "}"
-                ""
-                "QComboBox {"
-                " background-color: #414450;"
-                " color: #F8F8F2; "
-                "}"
-                ""
-                "QToolButton {"
-                " max-width: 15px; "
-                " max-height: 15px; "
-                " margin: 8px 4px; "
-                "}"
-                ""
-                "QToolButton:hover {"
-                " background-color: #282a36; "
-                "}"
-                ""
-                "QLineEdit {"
-                " background-color: #282a36; "
-                " color: #F8F8F2; "
-                "}"
-                ""
-                "QScrollBar:vertical {"
-                "    padding: 0px 0px 0px 0px;"
-                "    background: #282a36;"
-                "}"
-                "QScrollBar::handle:vertical {"
-                "    background: #4c4d56;"
-                "}"
-                ""
-                "QMainWindow {"
-                " background-color: #414450; "
-                "}");
+  setStyleSheet(StyleSheet);
 }
 
 MainWindow::~MainWindow() = default;
-
-void MainWindow::load_style(QString path)
-{
-  for (auto &cuda_ptx_pair: cuda_ptx_pairs)
-  {
-    cuda_ptx_pair->load_style(path, this);
-  }
-}
 
 void MainWindow::interpret()
 {
@@ -438,6 +436,18 @@ float median(int begin, int end, const std::vector<float> &sorted_list)
         float left = sorted_list.at(count / 2 - 1 + begin);
         return (right + left) / 2.0;
     }
+}
+
+void MainWindow::add()
+{
+  const std::size_t new_src_id = cuda_ptx_pairs.size();
+
+  auto new_pair = std::make_unique<CUDAPTXPair>(QString("Source #") +
+                                                  QString::number(new_src_id),
+                                                this);
+  new_pair->reset_timer();
+  new_pair->load_style(":/style/dracula.xml", this);
+  cuda_ptx_pairs.push_back(std::move(new_pair));
 }
 
 void MainWindow::execute()

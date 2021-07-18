@@ -99,14 +99,14 @@ public:
 
   SyntaxStyle* syntaxStyle;
 
+  QAction *add_action {};
   QAction *run_action {};
   QAction *interpret_action {};
 
   std::unique_ptr<PTXExecutor> executor;
 
-  void load_style(QString path);
-
 private slots:
+  void add();
   void interpret();
   void execute();
 };
