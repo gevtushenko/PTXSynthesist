@@ -18,18 +18,13 @@ QT_CHARTS_USE_NAMESPACE
 #include "kernel_param.h"
 #include "ptx_executor.h"
 
-enum class InputType
-{
-  unspecified,
-  memset,
-  scalar
-};
-
 class QLineEdit;
 class QGroupBox;
 class CodeEditor;
 class QToolBar;
 class QTimer;
+class QValueAxis;
+class QCategoryAxis;
 
 class SyntaxStyle;
 class MainWindow;
@@ -68,7 +63,9 @@ public:
     ScatterLineSeries();
 
     void set_color(QColor color);
-    void add_to_chart(QChart *chart);
+    void add_to_chart(QValueAxis *y_axis,
+                      QCategoryAxis *x_axis,
+                      QChart *chart);
 
     void append(int x, float y);
 };
@@ -87,12 +84,12 @@ public:
 
   int execution_id {};
 
-  ScatterLineSeries min_series;
   ScatterLineSeries median_series;
-  ScatterLineSeries max_series;
 
   QChartView *chart_view {};
   QChart *chart {};
+  QValueAxis *y_axis {};
+  QCategoryAxis *x_axis {};
 
   float min_elapsed = std::numeric_limits<float>::max();
   float max_elapsed = 0.0f;

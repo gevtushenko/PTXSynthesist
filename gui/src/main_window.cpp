@@ -15,6 +15,8 @@
 #include <QTableWidget>
 #include <QBarCategoryAxis>
 
+#include <QCategoryAxis>
+
 #include "ptx_executor.h"
 #include "ptx_generator.h"
 #include "ptx_interpreter.h"
@@ -339,10 +341,18 @@ void ScatterLineSeries::set_color(QColor color)
     // scatter_series->setColor(QColor("#F8F8F2"));
 }
 
-void ScatterLineSeries::add_to_chart(QChart *chart)
+void ScatterLineSeries::add_to_chart(QValueAxis *y_axis,
+                                     QCategoryAxis *x_axis,
+                                     QChart *chart)
 {
-    chart->addSeries(line_series);
-    chart->addSeries(scatter_series);
+  chart->addSeries(line_series);
+  chart->addSeries(scatter_series);
+
+  line_series->attachAxis(x_axis);
+  line_series->attachAxis(y_axis);
+
+  scatter_series->attachAxis(x_axis);
+  scatter_series->attachAxis(y_axis);
 }
 
 void ScatterLineSeries::append(int x, float y)
@@ -360,15 +370,23 @@ MainWindow::MainWindow()
   chart_view->setBackgroundBrush(QBrush(QColor("#282a36")));
   chart_view->setRenderHint(QPainter::Antialiasing);
 
-  min_series.set_color("#BD93F9");
-  max_series.set_color("#FFB86C");
+  // min_series.set_color("#BD93F9");
+  // max_series.set_color("#FFB86C");
   median_series.set_color("#50FA7B");
 
-  min_series.add_to_chart(chart);
-  max_series.add_to_chart(chart);
-  median_series.add_to_chart(chart);
+  y_axis = new QValueAxis();
+  x_axis = new QCategoryAxis();
+  x_axis->setLabelsPosition(QCategoryAxis::AxisLabelsPositionOnValue);
 
-  chart->createDefaultAxes();
+  chart->addAxis(x_axis, Qt::AlignBottom);
+  chart->addAxis(y_axis, Qt::AlignLeft);
+
+  // min_series.add_to_chart(chart);
+  // max_series.add_to_chart(chart);
+  median_series.add_to_chart(y_axis, x_axis, chart);
+
+  // chart->createDefaultAxes();
+
   chart->legend()->hide();
 
   chart->axes(Qt::Vertical).back()->setLabelsColor(QColor("#F8F8F2"));
@@ -461,10 +479,12 @@ void MainWindow::execute()
 
   if (pairs_elapsed_times.size() == 1)
   {
-    for (auto &measurement: pairs_elapsed_times[0])
+    for (std::size_t i = 0; i < pairs_elapsed_times[0].size(); i++)
     {
-      elapsed_times.push_back(measurement.get_median());
+      elapsed_times.push_back(pairs_elapsed_times[0][i].get_median());
+      x_axis->append(QString::number(i), i + 1);
     }
+    x_axis->setRange(0, pairs_elapsed_times[0].size() + 1);
   }
   else if (pairs_elapsed_times.size() == 2)
   {
@@ -473,6 +493,7 @@ void MainWindow::execute()
       for (std::size_t i = 0; i < pairs_elapsed_times[0].size(); i++)
       {
         elapsed_times.push_back(pairs_elapsed_times[0][i].get_median() / pairs_elapsed_times[1][i].get_median());
+        x_axis->append(QString::number(i), i);
       }
     }
   }
@@ -488,6 +509,6 @@ void MainWindow::execute()
     median_series.append(execution_id++, time);
   }
 
-  chart->axes(Qt::Horizontal).back()->setRange(0, execution_id + 1);
-  chart->axes(Qt::Vertical).back()->setRange(min_elapsed - min_elapsed / 4, max_elapsed + max_elapsed / 4);
+  // chart->axes(Qt::Horizontal).back()->setRange(0, execution_id + 1);
+  y_axis->setRange(-0.1, max_elapsed + max_elapsed / 4);
 }
